@@ -1,0 +1,61 @@
+{
+  "proyecto": {
+    "nombre": "Gestor Inteligente de Operaciones Jurídicas (GIOJ)",
+    "version": "0.1.0",
+    "modo": "desarrollo",
+    "idioma": "es-CO"
+  },
+
+  "rutas": {
+    "arquitectura": "./Configuracion/Arquitectura.xlsx",
+    "plantillas": "./Plantillas/",
+    "documentos": "./Documentos/",
+    "conocimiento": "./Conocimiento/",
+    "salidas": "./Salidas/",
+    "logs": "./Logs/"
+  },
+
+  "archivos": {
+    "plantilla_conformidad": "Conformidad.docx",
+    "plantilla_no_conformidad": "No_Conformidad.docx"
+  },
+
+  "hojas": {
+    "campos": "01_Campos_Extraccion",
+    "matriz": "02_Matriz_Origen_Datos",
+    "catalogos": "03_Catalogos",
+    "reglas": "04_Reglas_Negocio",
+    "extraccion": "05_Extraccion_Documental",
+    "flujo": "06_Flujo_Analisis_Conformidad",
+    "salida": "07_Salida_Analisis",
+    "trazabilidad": "08_Trazabilidad",
+    "marcadores": "09_Marcadores_Documento"
+  },
+
+  "ocr": {
+    "habilitado": true,
+    "idioma": "spa",
+    "permitir_pdf_escaneado": true
+  },
+
+  "analisis": {
+    "comparacion_textual": true,
+    "normalizar_texto": true,
+    "ignorar_mayusculas": true,
+    "ignorar_tildes": true,
+    "registrar_trazabilidad": true
+  },
+
+  "salida": {
+    "generar_pdf": true,
+    "generar_log": true,
+    "mostrar_resumen": true,
+    "mostrar_trazabilidad": true
+  },
+
+  "ia": {
+    "usar_conocimiento_local": true,
+    "carpeta": "./Conocimiento/",
+    "usar_analisis_historicos": true
+  }
+}

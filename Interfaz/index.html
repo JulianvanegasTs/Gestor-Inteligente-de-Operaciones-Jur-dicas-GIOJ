@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIOJ – Gestor Inteligente de Operaciones Jurídicas</title>
+    <!-- Fuente Inter de Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-header: #1c335a;
+            --bg-body: #e9ecef;
+            --card-bg: #ffffff;
+            --btn-green: #22a761;
+            --btn-green-hover: #1b8a4f;
+            --btn-blue: #21385b;
+            --btn-blue-hover: #182a45;
+            --btn-action: #2563eb;
+            --btn-action-hover: #1d4ed8;
+            --text-main: #2b3674;
+            --text-muted: #6c757d;
+            --border-dashed: #a3b1cc;
+            --shadow-card: 0px 10px 30px rgba(0, 0, 0, 0.05);
+            --border-radius: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header Principal */
+        .app-header {
+            background-color: var(--bg-header);
+            color: #ffffff;
+            padding: 24px 40px 60px 40px;
+        }
+
+        .app-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        /* Layout Principal */
+        .main-container {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 24px;
+            padding: 0 40px;
+            margin-top: -35px; /* Superposición sobre el header */
+            flex: 1;
+            max-width: 1440px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Estilos de Tarjetas */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-card);
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* SECCIÓN IZQUIERDA: Carga de Archivos */
+        .upload-section {
+            gap: 20px;
+        }
+
+        .top-action-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-new-project {
+            background-color: var(--btn-green);
+            color: white;
+            border: 3px solid #6ee7b7;
+            border-radius: 50px;
+            padding: 12px 28px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(34, 167, 97, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .btn-new-project:hover {
+            background-color: var(--btn-green-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-new-project .plus-icon {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .action-hint {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Dropzone (Solo caja de archivos) */
+        .dropzone {
+            border: 2px dashed var(--border-dashed);
+            border-radius: var(--border-radius);
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8fafc;
+            flex: 1;
+            text-align: center;
+        }
+
+        .file-icons-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .icon-badge {
+            width: 48px;
+            height: 58px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 0 -8px;
+        }
+
+        .icon-pdf { background-color: #e63946; transform: rotate(-5deg); z-index: 1; }
+        .icon-word { background-color: #1d3557; z-index: 2; transform: translateY(4px); }
+        .icon-doc { background-color: #a8dadc; color: #1d3557; transform: rotate(5deg); z-index: 1; }
+
+        .dropzone-status {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .file-list {
+            list-style: none;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .file-item {
+            font-size: 0.85rem;
+            color: #4a5568;
+            padding: 4px 0;
+            font-weight: 500;
+        }
+
+        /* Botón de análisis situado FUERA de la caja */
+        .btn-start-analysis {
+            background-color: var(--btn-blue);
+            color: white;
+            border: 2px solid #94a3b8;
+            border-radius: 50px;
+            padding: 14px 40px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(33, 56, 91, 0.3);
+            transition: all 0.2s ease;
+            align-self: center; /* Alineado al centro horizontalmente */
+            margin-top: auto;   /* Empujado a la parte inferior de la tarjeta */
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .btn-start-analysis:hover {
+            background-color: var(--btn-blue-hover);
+            transform: translateY(-1px);
+        }
+
+        /* SECCIÓN DERECHA: Resultados en secuencia vertical */
+        .results-section {
+            gap: 12px;
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #2d3748;
+        }
+
+        /* Campos de Salida/Texto */
+        .text-output-box {
+            background-color: #f1f5f9;
+            border-radius: 10px;
+            padding: 14px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+        }
+
+        .box-summary {
+            height: 140px;
+        }
+
+        .box-info {
+            height: 120px;
+            margin-bottom: 8px;
+        }
+
+        .placeholder-line {
+            height: 10px;
+            background-color: #cbd5e1;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .placeholder-line.w-100 { width: 100%; }
+        .placeholder-line.w-90 { width: 90%; }
+        .placeholder-line.w-80 { width: 80%; }
+        .placeholder-line.w-60 { width: 60%; }
+        .placeholder-line.w-40 { width: 40%; }
+
+        .btn-generate-doc {
+            background-color: var(--btn-action);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+            transition: all 0.2s ease;
+            width: 100%;
+            margin-top: auto;
+        }
+
+        .btn-generate-doc:hover {
+            background-color: var(--btn-action-hover);
+            transform: translateY(-1px);
+        }
+
+        /* Footer */
+        .app-footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 20px;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Principal -->
+    <header class="app-header">
+        <h1>GIOJ – Gestor Inteligente<br>de Operaciones Jurídicas</h1>
+    </header>
+
+    <!-- Contenedor Principal -->
+    <main class="main-container">
+
+        <!-- Sección Izquierda: Subida de Archivos -->
+        <section class="card upload-section">
+            <div class="top-action-bar">
+                <button class="btn-new-project" id="btn-upload">
+                    <span class="plus-icon">+</span>
+                    CREAR NUEVO PROYECTO
+                </button>
+                <span class="action-hint">(Haga clic o arrastre archivos aquí)</span>
+                <input type="file" id="file-input" multiple accept=".pdf,.docx,.doc,.txt">
+            </div>
+
+            <!-- Área Drag & Drop (Solo contiene los archivos) -->
+            <div class="dropzone" id="dropzone">
+                <div class="file-icons-group">
+                    <div class="icon-badge icon-pdf">PDF</div>
+                    <div class="icon-badge icon-word">W</div>
+                    <div class="icon-badge icon-doc">≡</div>
+                </div>
+
+                <p class="dropzone-status">Archivos cargados listos para análisis.</p>
+
+                <ul class="file-list" id="file-list">
+                    <li class="file-item">documento1.pdf (3.2 MB)</li>
+                    <li class="file-item">reporte_final.docx (1.8 MB)</li>
+                </ul>
+            </div>
+
+            <!-- Botón situado FUERA de la caja de archivos -->
+            <button class="btn-start-analysis" id="btn-analyze">INICIAR ANÁLISIS</button>
+        </section>
+
+        <!-- Sección Derecha: Resultados -->
+        <section class="card results-section">
+            
+            <h2 class="section-title">Resumen del análisis realizado</h2>
+            
+            <div class="text-output-box box-summary" id="output-summary">
+                <div class="placeholder-line w-100"></div>
+                <div class="placeholder-line w-90"></div>
+                <div class="placeholder-line w-80"></div>
+                <div class="placeholder-line w-40"></div>
+            </div>
+
+            <h2 class="section-title">Información Relevante Identificada:</h2>
+
+            <div class="text-output-box box-info" id="output-info">
+                <div class="placeholder-line w-100"></div>
+                <div class="placeholder-line w-60"></div>
+            </div>
+            
+            <button class="btn-generate-doc" id="btn-generate">
+                📄 Generar Documento
+            </button>
+        </section>
+
+    </main>
+
+    <!-- Pie de página -->
+    <footer class="app-footer">
+        Estado del Sistema: Listo para procesar nuevos documentos | © 2024 InnovaTech Soluciones
+    </footer>
+
+    <script>
+        const btnUpload = document.getElementById('btn-upload');
+        const fileInput = document.getElementById('file-input');
+        const btnAnalyze = document.getElementById('btn-analyze');
+        const outputSummary = document.getElementById('output-summary');
+        const outputInfo = document.getElementById('output-info');
+        const btnGenerate = document.getElementById('btn-generate');
+
+        btnUpload.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        btnAnalyze.addEventListener('click', () => {
+            outputSummary.innerHTML = '<p style="color: #2b3674; font-size: 0.85rem;">Procesando resumen...</p>';
+            outputInfo.innerHTML = '<p style="color: #2b3674; font-size: 0.85rem;">Extrayendo entidades clave...</p>';
+            
+            setTimeout(() => {
+                outputSummary.innerHTML = `
+                    <p style="font-size: 0.85rem; line-height: 1.4; color: #334155;">
+                        Se revisaron 2 documentos contractuales. Se identifica un acuerdo marco con vigencia hasta diciembre y cláusulas de confidencialidad estándar.
+                    </p>
+                `;
+                outputInfo.innerHTML = `
+                    <ul style="font-size: 0.85rem; color: #334155; padding-left: 18px; line-height: 1.4;">
+                        <li><strong>Partes:</strong> Empresa A vs. Proveedor B</li>
+                        <li><strong>Monto Total:</strong> $45,000 USD</li>
+                        <li><strong>Jurisdicción:</strong> CDMX, México</li>
+                    </ul>
+                `;
+            }, 1500);
+        });
+
+        btnGenerate.addEventListener('click', () => {
+            alert('Generando documento PDF/Word consolidado desde GIOJ...');
+        });
+    </script>
+</body>
+</html>
