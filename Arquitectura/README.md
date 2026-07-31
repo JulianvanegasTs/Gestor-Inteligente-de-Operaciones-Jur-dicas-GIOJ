@@ -1,111 +1,41 @@
-# GIOJ – Gestor Inteligente de Operaciones Jurídicas
+# Arquitectura del Sistema
 
-> Plataforma inteligente para la gestión documental y validación jurídica mediante Inteligencia Artificial.
+Esta carpeta contiene toda la configuración funcional del proyecto.
 
----
+El sistema obtiene desde estos archivos todas las reglas necesarias para ejecutar el análisis.
 
-## 📖 Descripción
+No deben programarse reglas jurídicas directamente en el código.
 
-GIOJ es una plataforma desarrollada para automatizar la gestión de operaciones jurídicas relacionadas con estudios de títulos, conformidades y créditos hipotecarios.
-
-Su objetivo es asistir a los analistas jurídicos mediante motores de extracción de información, OCR, inteligencia artificial y reglas de negocio.
+Toda modificación funcional debe realizarse desde Arquitectura.xlsx.
 
 ---
 
-## 🎯 Objetivos
+# Archivos
 
-- Automatizar procesos documentales.
-- Reducir tiempos de análisis.
-- Disminuir errores manuales.
-- Centralizar la información.
-- Generar conceptos preliminares.
-- Mejorar la trazabilidad del proceso.
+Arquitectura.xlsx
 
----
+Contiene:
 
-## 🏗 Arquitectura General
+- Campos de extracción
+- Catálogos
+- Reglas jurídicas
+- Flujo del analista
+- Motor de extracción
+- Salidas
+- Trazabilidad
+- Marcadores
+- Formateadores
 
-```text
-Solicitud
-    │
-    ▼
-Carga de documentos
-    │
-    ▼
-OCR
-    │
-    ▼
-Motor de extracción
-    │
-    ▼
-IA
-    │
-    ▼
-Motor de conformidades
-    │
-    ▼
-Analista Jurídico
-    │
-    ▼
-Informe Final
-```
+config.json
+
+Contiene parámetros generales del sistema.
 
 ---
 
-## 📦 Módulos
+# Objetivo
 
-- 🔐 Autenticación
-- 👥 Usuarios
-- 📁 Solicitudes
-- 📄 Gestión documental
-- 🤖 Motor de IA
-- 🔍 Motor de extracción
-- ✅ Motor de conformidades
-- 📊 Reportes
-- ⚙️ Catálogos
-- 📝 Auditoría
+Separar completamente la lógica jurídica del código fuente.
 
----
+El programa únicamente interpreta esta arquitectura.
 
-## 🛠 Tecnologías
-
-- Google Apps Script
-- JavaScript (ES2022)
-- HTML5
-- CSS3
-- Google Sheets
-- Google Drive
-- Gemini API
-- Git
-- GitHub
-
----
-
-## 📂 Estructura del proyecto
-
-```text
-docs/
-src/
-tests/
-scripts/
-```
-
----
-
-## 🚀 Estado del proyecto
-
-**Fase actual**
-
-Diseño del MVP.
-
----
-
-## 🎯 Visión
-
-Construir una plataforma inteligente capaz de asistir jurídicamente en la revisión documental y validación de operaciones inmobiliarias y crediticias.
-
----
-
-## 📄 Licencia
-
-Pendiente de definir.
+Nunca debe modificarla.
