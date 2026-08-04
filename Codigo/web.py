@@ -1,0 +1,178 @@
+"""Servidor local que conecta la interfaz oficial con el motor de GIOJ."""
+
+from __future__ import annotations
+
+import json
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+from .bootstrap import StartupReport, initialize_project
+
+
+CLIENT_CONNECTOR = """
+<script>
+(() => {
+  const request = async (url, payload = {}) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    return response.json();
+  };
+  const replaceButton = (id, handler) => {
+    const current = document.getElementById(id);
+    const replacement = current.cloneNode(true);
+    current.replaceWith(replacement);
+    replacement.addEventListener('click', handler);
+    return replacement;
+  };
+  const hint = document.querySelector('.action-hint');
+  const input = document.getElementById('file-input');
+  const fileList = document.getElementById('file-list');
+  const summary = document.getElementById('output-summary');
+  const info = document.getElementById('output-info');
+  const show = (target, message) => { target.textContent = message; };
+
+  replaceButton('btn-upload', async () => {
+    const result = await request('/api/proyectos/nuevo');
+    show(summary, result.mensaje);
+    show(info, result.detalle);
+    input.click();
+  });
+  input.addEventListener('change', async () => {
+    const documents = [...input.files].map(file => file.name);
+    const result = await request('/api/expediente/seleccion', {documentos: documents});
+    fileList.replaceChildren(...documents.map(name => {
+      const item = document.createElement('li');
+      item.className = 'file-item';
+      item.textContent = name;
+      return item;
+    }));
+    hint.textContent = result.detalle;
+  });
+  replaceButton('btn-analyze', async () => {
+    const result = await request('/api/analisis/iniciar');
+    show(summary, result.mensaje);
+    show(info, result.detalle);
+  });
+  replaceButton('btn-generate', async () => {
+    const result = await request('/api/documento/generar');
+    show(summary, result.mensaje);
+    show(info, result.detalle);
+  });
+})();
+</script>
+""".strip()
+
+
+def _report_payload(report: StartupReport) -> dict[str, Any]:
+    """Convierte el diagnóstico de arranque en una respuesta JSON segura."""
+    return {
+        "listo": report.is_ready,
+        "diagnosticos": [
+            {"estado": item.status, "asunto": item.subject, "detalle": item.detail}
+            for item in report.diagnostics
+        ],
+    }
+
+
+def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
+    """Crea un servidor solo local para la interfaz oficial del proyecto."""
+    interface_path = project_root / "Programa" / "index.html"
+
+    class GIOJRequestHandler(BaseHTTPRequestHandler):
+        def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _read_json(self) -> dict[str, Any]:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length == 0:
+                return {}
+            value = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(value, dict):
+                raise ValueError("El cuerpo debe ser un objeto JSON")
+            return value
+
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path == "/":
+                if not interface_path.is_file():
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": "Interfaz no encontrada"})
+                    return
+                page = interface_path.read_text(encoding="utf-8")
+                body = page.replace("</body>", f"{CLIENT_CONNECTOR}</body>").encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path == "/api/estado":
+                self._send_json(HTTPStatus.OK, _report_payload(initialize_project(project_root)))
+                return
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
+
+        def do_POST(self) -> None:  # noqa: N802
+            try:
+                payload = self._read_json()
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Solicitud JSON inválida"})
+                return
+            if self.path == "/api/proyectos/nuevo":
+                report = initialize_project(project_root)
+                status = HTTPStatus.OK if report.is_ready else HTTPStatus.SERVICE_UNAVAILABLE
+                self._send_json(status, {
+                    **_report_payload(report),
+                    "mensaje": "Proyecto inicializado." if report.is_ready else "El proyecto no está listo.",
+                    "detalle": "Seleccione los documentos del expediente para continuar.",
+                })
+                return
+            if self.path == "/api/expediente/seleccion":
+                documents = payload.get("documentos", [])
+                if not isinstance(documents, list) or not all(isinstance(item, str) for item in documents):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "La selección de documentos no es válida"})
+                    return
+                self._send_json(HTTPStatus.OK, {
+                    "mensaje": "Selección registrada en la interfaz.",
+                    "detalle": f"{len(documents)} documento(s) seleccionado(s). La lectura inicia en GIOJ-003.",
+                })
+                return
+            pending = {
+                "/api/analisis/iniciar": ("Análisis pendiente.", "La lectura, OCR y análisis se implementarán en GIOJ-003 a GIOJ-010."),
+                "/api/documento/generar": ("Generación pendiente.", "La generación documental se implementará en GIOJ-012 y GIOJ-013."),
+            }
+            if self.path in pending:
+                message, detail = pending[self.path]
+                self._send_json(HTTPStatus.CONFLICT, {"mensaje": message, "detalle": detail})
+                return
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            """Evita registrar datos del navegador fuera de los logs de GIOJ."""
+
+    return ThreadingHTTPServer(("127.0.0.1", port), GIOJRequestHandler)
+
+
+def serve_interface(project_root: Path, port: int = 0) -> int:
+    """Inicia la interfaz local cuando la configuración del proyecto es válida."""
+    report = initialize_project(project_root)
+    if not report.is_ready:
+        print(report.to_console())
+        return 1
+    server = create_server(project_root, port)
+    address, selected_port = server.server_address[:2]
+    print(f"Interfaz GIOJ disponible en http://{address}:{selected_port}/")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServidor GIOJ detenido.")
+    finally:
+        server.server_close()
+    return 0

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
 import zipfile
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 from Codigo.bootstrap import initialize_project
 from Codigo.config import ConfigurationError, resolve_project_path
+from Codigo.web import create_server
 
 
 SHEETS = {
@@ -90,6 +93,47 @@ class BootstrapTests(unittest.TestCase):
     def test_absolute_configuration_path_is_rejected(self) -> None:
         with self.assertRaises(ConfigurationError):
             resolve_project_path(Path.cwd(), "C:/ruta/no_permitida")
+
+    def test_interface_is_served_without_modifying_the_source_file(self) -> None:
+        root = self.create_project()
+        source = (root / "Programa")
+        source.mkdir()
+        interface = source / "index.html"
+        original = "<html><body><button id='btn-upload'></button></body></html>"
+        interface.write_text(original, encoding="utf-8")
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            with urlopen(f"http://{address}:{port}/") as response:
+                delivered = response.read().decode("utf-8")
+            self.assertIn("/api/proyectos/nuevo", delivered)
+            self.assertEqual(interface.read_text(encoding="utf-8"), original)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_new_project_endpoint_returns_readiness(self) -> None:
+        root = self.create_project()
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            request = Request(
+                f"http://{address}:{port}/api/proyectos/nuevo",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(payload["listo"])
+            self.assertEqual(payload["mensaje"], "Proyecto inicializado.")
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

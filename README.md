@@ -109,3 +109,19 @@ Para ejecutar las pruebas de inicialización:
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+---
+
+# Interfaz local (GIOJ-002)
+
+Para abrir la interfaz oficial conectada al backend local:
+
+```powershell
+python -m Codigo interfaz --puerto 8000
+```
+
+Abra `http://127.0.0.1:8000/` en el navegador. La interfaz se sirve desde
+`Programa/index.html` sin modificar ese archivo. Los botones se conectan con
+el backend: Nuevo Proyecto valida el entorno, la selección registra únicamente
+los nombres de archivos y los pasos de análisis/generación muestran que serán
+habilitados en sus tareas posteriores.
