@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from Codigo.expediente import ExpedienteError, read_expediente
+from Codigo.expediente import ExpedienteError, find_expediente_id, read_expediente
 from Codigo.web import create_server
 
 
@@ -64,6 +64,14 @@ class ExpedienteTests(unittest.TestCase):
         with self.assertRaisesRegex(ExpedienteError, "01_Documentos"):
             read_expediente(root, "EXP-002")
 
+    def test_find_expediente_id_uses_unique_document_names(self) -> None:
+        root = create_project()
+        documents = root / "Expedientes" / "EXP-004" / "01_Documentos"
+        documents.mkdir(parents=True)
+        (documents / "unico.pdf").write_bytes(b"sin procesar")
+
+        self.assertEqual(find_expediente_id(root, ["unico.pdf"]), "EXP-004")
+
     def test_selection_endpoint_reads_only_the_selected_expediente(self) -> None:
         root = create_project()
         documents = root / "Expedientes" / "EXP-003" / "01_Documentos"
@@ -88,6 +96,29 @@ class ExpedienteTests(unittest.TestCase):
                 "ubicacion_original": "Expedientes/EXP-003/01_Documentos/ctl.pdf",
                 "categoria": "PDF",
             }])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_selection_endpoint_identifies_expediente_from_attached_names(self) -> None:
+        root = create_project()
+        documents = root / "Expedientes" / "EXP-005" / "01_Documentos"
+        documents.mkdir(parents=True)
+        (documents / "seleccion-unica.pdf").write_bytes(b"sin procesar")
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            request = Request(
+                f"http://{address}:{port}/api/expediente/seleccion",
+                data=json.dumps({"documentos": ["seleccion-unica.pdf"]}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(payload["expediente"]["id"], "EXP-005")
         finally:
             server.shutdown()
             server.server_close()

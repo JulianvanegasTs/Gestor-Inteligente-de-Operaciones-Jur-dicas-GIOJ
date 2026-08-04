@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import StartupReport, initialize_project
-from .expediente import ExpedienteError, read_expediente
+from .expediente import ExpedienteError, find_expediente_id, read_expediente
 
 
 CLIENT_CONNECTOR = """
@@ -50,11 +50,21 @@ CLIENT_CONNECTOR = """
     const documents = files.map(file => file.name);
     const firstPath = files[0]?.webkitRelativePath || '';
     const expedienteId = firstPath.split('/')[0];
-    const result = await request('/api/expediente/seleccion', {id_expediente: expedienteId});
-    fileList.replaceChildren(...documents.map(name => {
+    const result = await request('/api/expediente/seleccion', {
+      id_expediente: expedienteId,
+      documentos: documents
+    });
+    if (result.error) {
+      show(summary, 'No fue posible cargar el expediente.');
+      show(info, result.error);
+      hint.textContent = result.error;
+      return;
+    }
+    const registeredDocuments = result.expediente.documentos;
+    fileList.replaceChildren(...registeredDocuments.map(document => {
       const item = document.createElement('li');
       item.className = 'file-item';
-      item.textContent = name;
+      item.textContent = document.nombre;
       return item;
     }));
     hint.textContent = result.detalle;
@@ -143,6 +153,8 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             if self.path == "/api/expediente/seleccion":
                 expediente_id = payload.get("id_expediente")
                 try:
+                    if not isinstance(expediente_id, str) or not expediente_id.strip():
+                        expediente_id = find_expediente_id(project_root, payload.get("documentos", []))
                     expediente = read_expediente(project_root, expediente_id)
                 except ExpedienteError as error:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})

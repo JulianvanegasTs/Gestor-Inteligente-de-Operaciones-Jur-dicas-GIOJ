@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,6 +87,35 @@ def _resolve_documents_directory(project_root: Path, expediente_id: str) -> tupl
     if not document_directory.is_dir():
         raise ExpedienteError("No se encontró la carpeta 01_Documentos del expediente")
     return configuration.project_root, expedientes_root.resolve(), document_directory
+
+
+def find_expediente_id(project_root: Path, document_names: list[str]) -> str:
+    """Identifica un expediente por los nombres adjuntos, sin abrir archivos."""
+    if not isinstance(document_names, list) or not document_names or not all(isinstance(name, str) for name in document_names):
+        raise ExpedienteError("La selección de documentos no es válida")
+    try:
+        configuration = load_configuration(project_root)
+        root = configuration.project_root
+        expedientes_root = configuration.route("expedientes").resolve()
+    except ConfigurationError as error:
+        raise ExpedienteError(str(error)) from error
+    selected = Counter(Path(name).name for name in document_names if Path(name).name)
+    if not selected:
+        raise ExpedienteError("La selección de documentos no contiene nombres válidos")
+
+    matches: list[str] = []
+    for candidate in expedientes_root.iterdir():
+        document_directory = candidate / "01_Documentos"
+        if not candidate.is_dir() or not document_directory.is_dir():
+            continue
+        available = Counter(path.name for path in document_directory.rglob("*") if path.is_file())
+        if not selected - available:
+            matches.append(candidate.name)
+    if len(matches) != 1:
+        raise ExpedienteError(
+            "No fue posible identificar una única carpeta de expediente con los documentos seleccionados"
+        )
+    return matches[0]
 
 
 def read_expediente(project_root: Path, expediente_id: str) -> Expediente:
