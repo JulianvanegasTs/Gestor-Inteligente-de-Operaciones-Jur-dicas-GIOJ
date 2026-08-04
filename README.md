@@ -81,3 +81,31 @@ Instrucciones para Codex.
 Versión actual:
 
 MVP en desarrollo.
+
+---
+
+# Inicialización (GIOJ-001)
+
+Desde la raíz del proyecto, ejecute:
+
+```powershell
+python -m Codigo
+```
+
+Se requiere Python 3.11 o superior instalado y disponible como `python` en el
+PATH del sistema.
+
+El comando lee `Arquitectura/config.json`, crea las carpetas operativas
+configuradas, inicializa `Logs/inicializacion.log` y valida el libro de
+arquitectura, sus hojas obligatorias y las plantillas declaradas.
+
+El proceso termina con código `0` si el sistema queda listo y con código `1`
+si encuentra una inconsistencia. Actualmente las plantillas existentes tienen
+nombres distintos de los declarados en `config.json`; por seguridad, el
+diagnóstico las reportará como faltantes sin modificar ningún archivo oficial.
+
+Para ejecutar las pruebas de inicialización:
+
+```powershell
+python -m unittest discover -s tests -v
+```
