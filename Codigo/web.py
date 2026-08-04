@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import StartupReport, initialize_project
+from .expediente import ExpedienteError, read_expediente
 
 
 CLIENT_CONNECTOR = """
@@ -40,11 +41,16 @@ CLIENT_CONNECTOR = """
     const result = await request('/api/proyectos/nuevo');
     show(summary, result.mensaje);
     show(info, result.detalle);
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
     input.click();
   });
   input.addEventListener('change', async () => {
-    const documents = [...input.files].map(file => file.name);
-    const result = await request('/api/expediente/seleccion', {documentos: documents});
+    const files = [...input.files];
+    const documents = files.map(file => file.name);
+    const firstPath = files[0]?.webkitRelativePath || '';
+    const expedienteId = firstPath.split('/')[0];
+    const result = await request('/api/expediente/seleccion', {id_expediente: expedienteId});
     fileList.replaceChildren(...documents.map(name => {
       const item = document.createElement('li');
       item.className = 'file-item';
@@ -135,13 +141,27 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 })
                 return
             if self.path == "/api/expediente/seleccion":
-                documents = payload.get("documentos", [])
-                if not isinstance(documents, list) or not all(isinstance(item, str) for item in documents):
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "La selección de documentos no es válida"})
+                expediente_id = payload.get("id_expediente")
+                try:
+                    expediente = read_expediente(project_root, expediente_id)
+                except ExpedienteError as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": "Selección registrada en la interfaz.",
-                    "detalle": f"{len(documents)} documento(s) seleccionado(s). La lectura inicia en GIOJ-003.",
+                    "mensaje": "Expediente cargado.",
+                    "detalle": f"{len(expediente.documentos)} archivo(s) registrado(s). El contenido no ha sido procesado.",
+                    "expediente": {
+                        "id": expediente.id_expediente,
+                        "ubicacion_original": expediente.ubicacion_original,
+                        "documentos": [
+                            {
+                                "nombre": item.nombre,
+                                "ubicacion_original": item.ubicacion_original,
+                                "categoria": item.categoria,
+                            }
+                            for item in expediente.documentos
+                        ],
+                    },
                 })
                 return
             pending = {

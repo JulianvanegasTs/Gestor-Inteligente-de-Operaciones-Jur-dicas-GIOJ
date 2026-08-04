@@ -125,3 +125,28 @@ Abra `http://127.0.0.1:8000/` en el navegador. La interfaz se sirve desde
 el backend: Nuevo Proyecto valida el entorno, la selección registra únicamente
 los nombres de archivos y los pasos de análisis/generación muestran que serán
 habilitados en sus tareas posteriores.
+
+---
+
+# Lectura del expediente (GIOJ-003)
+
+La carpeta del expediente debe existir dentro de `Expedientes/` y conservar
+esta estructura:
+
+```text
+Expedientes/
+└── EXP-001/
+    └── 01_Documentos/
+        ├── escritura.pdf
+        └── anexos/
+            └── soporte.jpg
+```
+
+Al seleccionar la carpeta `EXP-001` desde la interfaz, GIOJ construye el
+objeto interno `Expediente` e inventaría de forma recursiva todos los archivos
+de `01_Documentos`. Conserva el nombre y la ubicación relativa original,
+identifica PDF, documentos Word e imágenes por su extensión, y registra cada
+archivo en `Logs/expediente.log`.
+
+Esta etapa no abre, no copia ni procesa el contenido de los documentos. La
+lectura está limitada a la carpeta configurada `Expedientes/`.
