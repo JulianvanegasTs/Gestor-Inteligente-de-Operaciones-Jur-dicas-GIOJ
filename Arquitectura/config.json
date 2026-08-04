@@ -1,23 +1,31 @@
 {
   "proyecto": {
     "nombre": "Gestor Inteligente de Operaciones Jurídicas (GIOJ)",
-    "version": "0.1.0",
+    "codigo": "GIOJ",
+    "version": "1.0.0-MVP",
     "modo": "desarrollo",
     "idioma": "es-CO"
   },
 
   "rutas": {
-    "arquitectura": "./Configuracion/Arquitectura.xlsx",
+    "arquitectura": "./Arquitectura/Arquitectura.xlsx",
     "plantillas": "./Plantillas/",
-    "documentos": "./Documentos/",
+    "expedientes": "./Expedientes/",
     "conocimiento": "./Conocimiento/",
-    "salidas": "./Salidas/",
-    "logs": "./Logs/"
+    "salida": "./Salida/",
+    "logs": "./Logs/",
+    "codigo": "./Codigo/"
   },
 
   "archivos": {
-    "plantilla_conformidad": "Conformidad.docx",
-    "plantilla_no_conformidad": "No_Conformidad.docx"
+    "plantilla_conformidad": "Certificado_Conformidad.docx",
+    "plantilla_no_conformidad": "Certificado_No_Conformidad.docx",
+    "readme": "./README.md",
+    "project": "./PROJECT.md",
+    "mvp": "./MVP.md",
+    "roadmap": "./ROADMAP.md",
+    "backlog": "./BACKLOG.md",
+    "agents": "./AGENTS.md"
   },
 
   "hojas": {
@@ -29,13 +37,17 @@
     "flujo": "06_Flujo_Analisis_Conformidad",
     "salida": "07_Salida_Analisis",
     "trazabilidad": "08_Trazabilidad",
-    "marcadores": "09_Marcadores_Documento"
+    "marcadores": "09_Marcadores_Documento",
+    "formateadores": "10_Formateadores"
   },
 
   "ocr": {
     "habilitado": true,
     "idioma": "spa",
-    "permitir_pdf_escaneado": true
+    "permitir_pdf_digital": true,
+    "permitir_pdf_escaneado": true,
+    "permitir_imagenes": true,
+    "registrar_confianza": true
   },
 
   "analisis": {
@@ -43,19 +55,61 @@
     "normalizar_texto": true,
     "ignorar_mayusculas": true,
     "ignorar_tildes": true,
-    "registrar_trazabilidad": true
+    "registrar_trazabilidad": true,
+    "comparar_documentos": true
+  },
+
+  "documentos": {
+    "preservar_originales": true,
+    "reemplazar_solo_marcadores": true,
+    "permitir_varios_inmuebles": true,
+    "permitir_varias_personas": true,
+    "permitir_varios_poderes": true,
+    "permitir_varios_creditos": true,
+    "mantener_formato_plantillas": true,
+    "generar_word": true,
+    "generar_pdf": true
   },
 
   "salida": {
+    "generar_word": true,
     "generar_pdf": true,
     "generar_log": true,
     "mostrar_resumen": true,
-    "mostrar_trazabilidad": true
+    "mostrar_trazabilidad": true,
+    "guardar_json_extraccion": true,
+    "guardar_json_validaciones": true
   },
 
   "ia": {
     "usar_conocimiento_local": true,
     "carpeta": "./Conocimiento/",
-    "usar_analisis_historicos": true
+    "usar_analisis_historicos": true,
+    "usar_casos": true,
+    "usar_normatividad": true,
+    "usar_jurisprudencia": true,
+    "usar_modelos": true,
+    "usar_catalogos": true,
+    "usar_reglas_negocio": true
+  },
+
+  "desarrollo": {
+    "usar_rutas_relativas": true,
+    "validar_arquitectura": true,
+    "leer_agents": true,
+    "leer_project": true,
+    "leer_mvp": true,
+    "leer_roadmap": true,
+    "leer_backlog": true,
+    "modo_debug": true,
+    "crear_logs": true,
+    "crear_commits_por_tarea": true
+  },
+
+  "seguridad": {
+    "modificar_documentos_originales": false,
+    "trabajar_sobre_copias": true,
+    "registrar_errores": true,
+    "proteger_trazabilidad": true
   }
 }

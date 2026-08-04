@@ -9,105 +9,153 @@
 
 El agente actúa como Arquitecto Implementador.
 
-Su responsabilidad consiste exclusivamente en implementar la arquitectura existente.
+Su responsabilidad es implementar la arquitectura existente del proyecto.
 
 No debe rediseñar el sistema.
 
 No debe simplificar procesos jurídicos.
 
-No debe modificar el funcionamiento definido por la arquitectura.
+No debe modificar decisiones funcionales previamente definidas.
 
-Todas las decisiones deberán respetar estrictamente la documentación del proyecto.
+Toda implementación debe respetar la documentación oficial del proyecto.
 
 ---
 
 # Prioridad de documentos
 
-Si existe una contradicción entre documentos, deberá respetarse el siguiente orden de prioridad:
+Si existe contradicción entre documentos, se debe respetar el siguiente orden:
 
 1. Arquitectura/Arquitectura.xlsx
 2. AGENTS.md
 3. PROJECT.md
 4. MVP.md
 5. ROADMAP.md
-6. README.md
+6. BACKLOG.md
+7. README.md
 
-Nunca deberá tomarse una decisión que contradiga Arquitectura.xlsx.
+Nunca implementar una funcionalidad que contradiga Arquitectura.xlsx.
 
 ---
 
 # Objetivo del proyecto
 
-El objetivo del proyecto NO es construir:
+El objetivo del proyecto es construir un sistema capaz de apoyar el análisis jurídico de expedientes para generar documentos de:
 
-- un OCR;
-- un CRM;
-- un gestor documental;
-- un sistema de IA genérico.
+- Certificado de Conformidad.
+- Certificado de No Conformidad.
 
-El objetivo consiste en reproducir el trabajo realizado actualmente por un analista jurídico encargado de emitir conceptos de conformidad para escrituras públicas.
+El sistema debe reproducir el flujo realizado actualmente por un analista jurídico.
 
-Toda decisión deberá orientarse a facilitar ese proceso.
+El sistema NO reemplaza el criterio profesional.
 
----
-
-# Arquitectura
-
-Toda la lógica funcional se encuentra definida en:
-
-Arquitectura/Arquitectura.xlsx
-
-El código únicamente deberá interpretar dicha arquitectura.
-
-Nunca deberán programarse reglas jurídicas manualmente.
+El resultado generado es una propuesta basada en reglas y evidencia documental.
 
 ---
 
-# Archivos que nunca podrán modificarse
+# Principio fundamental
 
-El agente NO podrá modificar:
+El motor jurídico tiene prioridad sobre cualquier elemento visual.
 
-Arquitectura.xlsx
+No desarrollar funcionalidades adicionales antes de completar el MVP.
 
-Plantillas Word
+---
 
-Interfaz HTML
+# Estructura del proyecto
 
-config.json
+La raíz del proyecto corresponde a:
 
-Marcadores definidos
+Gestor-Inteligente-de-Operaciones-Jurídicas-GIOJ/
 
-Formateadores
+El sistema debe trabajar utilizando rutas relativas.
 
-Reglas de negocio
+Nunca utilizar rutas absolutas del computador.
 
-Únicamente podrá leer dichos archivos.
+Estructura esperada:
+
+/
+
+├── Arquitectura/
+│   ├── Arquitectura.xlsx
+│   ├── config.json
+│   └── README.md
+│
+├── Plantillas/
+│   ├── Certificado_Conformidad.docx
+│   └── Certificado_No_Conformidad.docx
+│
+├── Expedientes/
+│
+├── Conocimiento/
+│
+├── Salida/
+│
+├── Logs/
+│
+├── Codigo/
+│
+├── README.md
+├── PROJECT.md
+├── MVP.md
+├── ROADMAP.md
+├── BACKLOG.md
+└── AGENTS.md
+
+---
+
+# Configuración
+
+Toda ruta, parámetro o configuración variable debe almacenarse en:
+
+Arquitectura/config.json
+
+Nunca escribir rutas directamente dentro del código.
+
+---
+
+# Archivos que nunca pueden modificarse
+
+El agente no podrá modificar sin autorización:
+
+- Arquitectura.xlsx.
+- Plantillas Word oficiales.
+- Interfaz HTML existente.
+- Reglas jurídicas.
+- Marcadores documentales.
+- Formateadores definidos.
+
+Estos archivos únicamente deben ser interpretados.
 
 ---
 
 # Interfaz
 
-La interfaz HTML existente constituye la interfaz oficial del proyecto.
+La interfaz HTML existente es la interfaz oficial del proyecto.
 
-El agente deberá reutilizarla.
+El agente deberá:
 
-No deberá crear una nueva interfaz.
+- Integrarla.
+- Conectarla con el backend.
+- Mantener su diseño.
 
-No deberá modificar el diseño salvo autorización expresa.
+No crear una nueva interfaz.
 
-El trabajo consiste en conectar la interfaz existente con el motor del sistema.
+No cambiar estructura visual sin autorización.
 
 ---
 
-# Flujo obligatorio
+# Flujo obligatorio del sistema
 
-Todo expediente deberá seguir exactamente este flujo:
+Todo análisis debe seguir:
 
 Interfaz
 
 ↓
 
-Selección del expediente
+Selección expediente
+
+↓
+
+Lectura documentos
 
 ↓
 
@@ -119,7 +167,7 @@ Clasificación documental
 
 ↓
 
-Extracción
+Extracción información
 
 ↓
 
@@ -127,7 +175,7 @@ Normalización
 
 ↓
 
-Validación documental
+Validaciones
 
 ↓
 
@@ -149,266 +197,208 @@ Generación Word
 
 Conversión PDF
 
-Nunca alterar este orden.
+---
+
+# Arquitectura funcional
+
+Toda la lógica debe provenir de:
+
+Arquitectura/Arquitectura.xlsx
+
+Incluyendo:
+
+- Campos extracción.
+- Origen documental.
+- Reglas negocio.
+- Catálogos.
+- Marcadores.
+- Formateadores.
+- Salidas.
+
+Nunca crear reglas o campos manualmente en código.
 
 ---
 
-# Desarrollo por fases
+# Extracción documental
 
-El desarrollo deberá seguir exactamente ROADMAP.md.
-
-No podrá iniciarse una fase nueva hasta finalizar completamente la anterior.
-
-Cada fase deberá ser funcional antes de continuar.
-
----
-
-# Filosofía de implementación
-
-Cada módulo deberá cumplir los siguientes principios:
-
-- Responsabilidad única.
-- Bajo acoplamiento.
-- Alta cohesión.
-- Fácil mantenimiento.
-- Fácil ampliación.
-- Fácil prueba.
-- Código reutilizable.
-
----
-
-# Arquitectura del código
-
-Separar claramente:
-
-Interfaz
-
-Servicios
-
-Motor OCR
-
-Clasificador documental
-
-Extractor
-
-Normalizador
-
-Motor jurídico
-
-Generador documental
-
-Utilidades
-
-Nunca mezclar responsabilidades.
-
----
-
-# Extracción
-
-Toda extracción deberá obtenerse desde:
+Toda extracción debe estar basada en:
 
 01_Campos_Extraccion
 
 05_Extraccion_Documental
 
-Nunca crear campos manualmente.
+Cada dato extraído debe conservar:
 
-Nunca inventar nuevos campos.
+- Documento origen.
+- Página.
+- Valor encontrado.
+- Confianza o evidencia cuando aplique.
 
 ---
 
-# Validaciones
+# Validaciones jurídicas
 
-Todas las reglas deberán obtenerse desde:
+Las reglas deben obtenerse desde:
 
 04_Reglas_Negocio
 
-Nunca escribir reglas directamente en el código.
+Cada validación debe indicar:
+
+- Regla aplicada.
+- Documento revisado.
+- Campo evaluado.
+- Resultado.
+- Observación.
+
+Estados permitidos:
+
+- Cumple.
+- No cumple.
+- No existe información.
+- No aplica.
 
 ---
 
 # Trazabilidad
 
-Cada validación deberá registrar como mínimo:
+La trazabilidad es obligatoria.
 
-Documento
+Cada resultado debe permitir responder:
 
-Página
+¿Qué se revisó?
 
-Campo
+¿Dónde se encontró?
 
-Valor esperado
+¿Cuál era el valor esperado?
 
-Valor encontrado
+¿Cuál fue el valor encontrado?
 
-Resultado
-
-Observación
-
-Nunca eliminar trazabilidad.
-
----
-
-# Concepto jurídico
-
-El sistema nunca reemplaza el criterio profesional del analista.
-
-Únicamente genera un borrador fundamentado utilizando:
-
-Resultado de las reglas.
-
-Información extraída.
-
-Evidencia documental.
-
-El analista conserva siempre la decisión final.
+¿Por qué cumple o no cumple?
 
 ---
 
 # Generación documental
 
-El sistema deberá utilizar exclusivamente las plantillas oficiales.
+Las plantillas oficiales deben mantenerse sin cambios.
 
 Nunca modificar:
 
-Formato
+- Diseño.
+- Márgenes.
+- Encabezados.
+- Pies.
+- Estilos.
+- Firmas.
 
-Estilos
+Únicamente reemplazar marcadores:
 
-Tablas
+{{MARCADOR}}
 
-Encabezados
+---
 
-Pies de página
+# Seguridad documental
 
-Numeración
+Los expedientes contienen información jurídica sensible.
 
-Únicamente reemplazar los marcadores definidos.
+El sistema debe:
+
+- Mantener documentos originales sin modificación.
+- Trabajar con copias cuando sea necesario.
+- No eliminar información.
+- Registrar errores.
+- Evitar envío de documentos fuera del entorno configurado.
+
+---
+
+# Expedientes de prueba
+
+Las pruebas iniciales deben realizarse en:
+
+Expedientes/Pruebas/
+
+No utilizar expedientes reales durante desarrollo sin autorización.
 
 ---
 
 # Manejo de errores
 
-El sistema nunca deberá detener completamente un análisis por un único error.
+Ante cualquier error:
 
-Ante cualquier excepción deberá:
-
-Registrar el error.
-
-Continuar el análisis.
-
-Mostrar el error al usuario.
-
-Guardar el error en los logs.
+1. Registrar el error.
+2. Continuar cuando sea posible.
+3. Mostrar información útil al usuario.
+4. Guardar evidencia en Logs.
 
 ---
 
 # Calidad del código
 
-Todo desarrollo deberá cumplir:
+Todo código debe cumplir:
 
-Código limpio.
-
-Nombres descriptivos.
-
-Funciones pequeñas.
-
-Responsabilidad única.
-
-Documentación de funciones públicas.
-
-Sin duplicación de código.
+- Responsabilidad única.
+- Código modular.
+- Funciones pequeñas.
+- Sin duplicación.
+- Nombres claros.
+- Documentación de funciones importantes.
 
 ---
 
-# Preparación para crecimiento
+# Control de cambios
 
-Aunque el desarrollo corresponde únicamente al MVP, toda la arquitectura deberá permitir incorporar posteriormente:
+Antes de modificar funcionalidades existentes:
 
-CRM
+- Revisar impacto.
+- Documentar cambios.
+- Crear commit.
+- Mantener historial.
 
-Usuarios
-
-Roles
-
-Panel administrativo
-
-Estadísticas
-
-Base de datos
-
-API
-
-Procesamiento distribuido
-
-Sin reescribir el motor jurídico.
+No eliminar funcionalidades aprobadas.
 
 ---
 
-# Criterios de aceptación
+# Desarrollo por fases
 
-Antes de finalizar cualquier fase deberán cumplirse todos los siguientes puntos:
+Seguir estrictamente:
 
-□ Compila correctamente.
+ROADMAP.md
 
-□ No presenta errores críticos.
+y ejecutar tareas:
 
-□ Respeta Arquitectura.xlsx.
+BACKLOG.md
 
-□ Respeta las plantillas Word.
+No avanzar hasta validar la tarea actual.
 
-□ Respeta la interfaz HTML.
+---
+
+# Criterios antes de cerrar una tarea
+
+Cada tarea debe cumplir:
+
+□ Funciona correctamente.
 
 □ No rompe funcionalidades anteriores.
 
-□ Está documentado.
+□ Respeta Arquitectura.xlsx.
 
-□ Puede ser utilizado por el siguiente módulo.
+□ Respeta plantillas.
 
----
+□ Respeta interfaz.
 
-# Restricciones
+□ Tiene prueba realizada.
 
-El agente nunca deberá:
-
-Modificar la arquitectura funcional.
-
-Modificar nombres de carpetas.
-
-Cambiar la estructura del proyecto.
-
-Inventar reglas jurídicas.
-
-Inventar campos.
-
-Eliminar trazabilidad.
-
-Reemplazar la interfaz.
-
-Modificar las plantillas.
-
-Modificar la documentación sin autorización.
+□ Tiene documentación suficiente.
 
 ---
 
-# Resultado esperado
+# Resultado esperado del MVP
 
-Al finalizar el desarrollo del MVP el sistema deberá ser capaz de:
+El sistema debe:
 
-1. Seleccionar un expediente.
-
-2. Leer automáticamente todos los documentos.
-
-3. Extraer toda la información.
-
-4. Aplicar las reglas jurídicas.
-
-5. Mostrar la trazabilidad completa.
-
-6. Generar un concepto jurídico.
-
-7. Generar automáticamente un Certificado de Conformidad o No Conformidad en Word.
-
-8. Convertir automáticamente el documento generado a PDF.
-
-Todo ello utilizando exclusivamente la arquitectura definida y la interfaz HTML existente.
+- Leer un expediente.
+- Extraer información.
+- Aplicar reglas jurídicas.
+- Generar trazabilidad.
+- Generar concepto jurídico.
+- Crear certificado de conformidad o no conformidad.
+- Convertirlo a PDF.
