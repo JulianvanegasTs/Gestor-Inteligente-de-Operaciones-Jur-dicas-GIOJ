@@ -11,7 +11,7 @@ Construir un MVP completamente funcional capaz de analizar expedientes jurídico
 
 El desarrollo deberá centrarse en implementar el motor jurídico utilizando la arquitectura definida en Arquitectura.xlsx.
 
-La interfaz HTML existente será la base del programa y no deberá ser reemplazada.
+La interfaz HTML existente será la base del programa.
 
 ---
 
@@ -85,7 +85,7 @@ Sistema listo para iniciar.
 # FASE 1
 ## Integración de la interfaz
 
-La interfaz HTML existente será utilizada como interfaz definitiva del MVP.
+La interfaz HTML existente será utilizada como interfaz del MVP.
 
 No deberá reemplazarse.
 

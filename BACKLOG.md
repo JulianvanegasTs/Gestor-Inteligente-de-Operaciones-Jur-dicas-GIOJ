@@ -31,7 +31,6 @@ Antes de iniciar cualquier tarea:
 
 - Arquitectura.xlsx
 - Plantillas Word
-- Interfaz HTML
 
 3. No programar reglas jurídicas directamente en código.
 

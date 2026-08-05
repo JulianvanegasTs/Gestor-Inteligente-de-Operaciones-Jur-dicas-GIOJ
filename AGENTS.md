@@ -118,7 +118,6 @@ El agente no podrá modificar sin autorización:
 
 - Arquitectura.xlsx.
 - Plantillas Word oficiales.
-- Interfaz HTML existente.
 - Reglas jurídicas.
 - Marcadores documentales.
 - Formateadores definidos.
