@@ -393,12 +393,12 @@
 
         const renderDocuments = (documents) => {
             fileList.replaceChildren();
-            for (const document of documents) {
-                const item = document.createElement('li');
+            for (const documentItem of documents) {
+                const item = window.document.createElement('li');
                 item.className = 'file-item';
-                item.textContent = document.categoria
-                    ? `${document.nombre} (${document.categoria})`
-                    : document.nombre;
+                item.textContent = documentItem.categoria
+                    ? `${documentItem.nombre} (${documentItem.categoria})`
+                    : documentItem.nombre;
                 fileList.appendChild(item);
             }
         };
