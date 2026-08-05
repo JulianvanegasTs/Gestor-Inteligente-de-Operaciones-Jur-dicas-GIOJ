@@ -51,15 +51,16 @@ CLIENT_CONNECTOR = """
     const result = await request('/api/proyectos/nuevo');
     show(summary, result.mensaje);
     show(info, result.detalle);
-    input.setAttribute('webkitdirectory', '');
-    input.setAttribute('directory', '');
+    input.removeAttribute('webkitdirectory');
+    input.removeAttribute('directory');
     input.click();
   });
   input.addEventListener('change', async () => {
     const files = [...input.files];
     const documents = files.map(file => file.name);
     const firstPath = files[0]?.webkitRelativePath || '';
-    const expedienteId = firstPath.split('/')[0];
+    const selectedDirectory = firstPath.split('/')[0];
+    const expedienteId = selectedDirectory === '01_Documentos' ? '' : selectedDirectory;
     try {
       const result = await request('/api/expediente/seleccion', {
         id_expediente: expedienteId,
