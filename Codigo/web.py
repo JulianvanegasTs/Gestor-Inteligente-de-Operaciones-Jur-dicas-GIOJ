@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from .bootstrap import StartupReport, initialize_project
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
@@ -118,6 +120,13 @@ def _report_payload(report: StartupReport) -> dict[str, Any]:
 def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     """Crea un servidor solo local para la interfaz oficial del proyecto."""
     interface_path = project_root / "Programa" / "index.html"
+    analysis_states: dict[str, dict[str, Any]] = {}
+    analysis_states_lock = threading.Lock()
+
+    def update_analysis_state(expediente_id: str, **values: Any) -> None:
+        with analysis_states_lock:
+            current = analysis_states.setdefault(expediente_id, {})
+            current.update(values)
 
     class GIOJRequestHandler(BaseHTTPRequestHandler):
         def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
@@ -138,7 +147,8 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             return value
 
         def do_GET(self) -> None:  # noqa: N802
-            if self.path == "/":
+            parsed = urlparse(self.path)
+            if parsed.path == "/":
                 if not interface_path.is_file():
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "Interfaz no encontrada"})
                     return
@@ -149,8 +159,14 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 self.end_headers()
                 self.wfile.write(body)
                 return
-            if self.path == "/api/estado":
+            if parsed.path == "/api/estado":
                 self._send_json(HTTPStatus.OK, _report_payload(initialize_project(project_root)))
+                return
+            if parsed.path == "/api/analisis/progreso":
+                expediente_id = parse_qs(parsed.query).get("id_expediente", [""])[0]
+                with analysis_states_lock:
+                    state = dict(analysis_states.get(expediente_id, {"estado": "sin_iniciar"}))
+                self._send_json(HTTPStatus.OK, state)
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
 
@@ -200,11 +216,38 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 if not isinstance(expediente_id, str) or not expediente_id.strip():
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Seleccione un expediente antes de analizar."})
                     return
+                update_analysis_state(
+                    expediente_id,
+                    estado="procesando",
+                    etapa="Preparando el expediente",
+                    documento=None,
+                    pagina=None,
+                )
+
+                def report_progress(documento: str, pagina: int | None, etapa: str) -> None:
+                    update_analysis_state(
+                        expediente_id,
+                        estado="procesando",
+                        etapa=etapa,
+                        documento=documento,
+                        pagina=pagina,
+                    )
+
                 try:
-                    result = extract_expediente_text(project_root, expediente_id)
+                    result = extract_expediente_text(project_root, expediente_id, report_progress)
                 except OCRExtractionError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
+                update_analysis_state(
+                    expediente_id,
+                    estado="completado",
+                    etapa="Extracción de texto completada",
+                    documento=None,
+                    pagina=None,
+                    archivo_salida=result.archivo_salida,
+                    errores=len(result.errores),
+                )
                 self._send_json(HTTPStatus.OK, {
                     "mensaje": "Texto documental extraído.",
                     "detalle": (

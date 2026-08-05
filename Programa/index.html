@@ -207,6 +207,17 @@
             transform: translateY(-1px);
         }
 
+        .btn-start-analysis:disabled {
+            cursor: wait;
+            opacity: 0.82;
+            transform: none;
+            animation: analysis-pulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes analysis-pulse {
+            50% { box-shadow: 0 4px 22px rgba(33, 56, 91, 0.65); }
+        }
+
         /* SECCIÓN DERECHA: Resultados en secuencia vertical */
         .results-section {
             gap: 12px;
@@ -445,6 +456,36 @@
         });
 
         btnAnalyze.addEventListener('click', async () => {
+            if (!selectedExpedienteId) {
+                showMessage(outputSummary, 'Seleccione un expediente antes de iniciar el análisis.');
+                return;
+            }
+            const originalButtonText = btnAnalyze.textContent;
+            const startedAt = Date.now();
+            btnAnalyze.disabled = true;
+            btnAnalyze.textContent = 'ANALIZANDO…';
+            showMessage(outputSummary, 'Extracción documental en curso.');
+            showMessage(outputInfo, 'Preparando el expediente…');
+            const showProgress = async () => {
+                const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+                try {
+                    const response = await fetch(
+                        `/api/analisis/progreso?id_expediente=${encodeURIComponent(selectedExpedienteId)}`
+                    );
+                    const progress = await response.json();
+                    const documentName = progress.documento ? progress.documento.split('/').pop() : '';
+                    const page = progress.pagina ? ` · Página ${progress.pagina}` : '';
+                    const location = documentName ? `\n${documentName}${page}` : '';
+                    showMessage(
+                        outputInfo,
+                        `${progress.etapa || 'Validando documentación…'}${location}\nTiempo transcurrido: ${elapsedSeconds} s`
+                    );
+                } catch (_error) {
+                    showMessage(outputInfo, `Validando documentación…\nTiempo transcurrido: ${elapsedSeconds} s`);
+                }
+            };
+            await new Promise(resolve => window.requestAnimationFrame(resolve));
+            const progressTimer = window.setInterval(showProgress, 1000);
             try {
                 const result = await request('/api/analisis/iniciar', {id_expediente: selectedExpedienteId});
                 if (result.error) {
@@ -456,6 +497,10 @@
                 const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
                 showMessage(outputSummary, 'No fue posible extraer el texto documental.');
                 showMessage(outputInfo, message);
+            } finally {
+                window.clearInterval(progressTimer);
+                btnAnalyze.disabled = false;
+                btnAnalyze.textContent = originalButtonText;
             }
         });
 

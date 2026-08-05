@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -12,7 +13,7 @@ from urllib.request import Request, urlopen
 
 from Codigo.config import load_configuration
 from Codigo.expediente import DocumentoExpediente
-from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, extract_expediente_text
+from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, _run_tesseract, extract_expediente_text
 from Codigo.web import create_server
 
 
@@ -50,6 +51,10 @@ class OCRTests(unittest.TestCase):
             with patch("Codigo.ocr._extract_document", return_value=[extracted]):
                 with urlopen(request) as response:
                     payload = json.loads(response.read().decode("utf-8"))
+            with urlopen(
+                f"http://{address}:{port}/api/analisis/progreso?id_expediente=EXP-WEB"
+            ) as response:
+                progress = json.loads(response.read().decode("utf-8"))
         finally:
             server.shutdown()
             server.server_close()
@@ -63,6 +68,27 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(output["textos"][0]["texto"], "texto visible")
         self.assertEqual(output["textos"][0]["metodo"], "OCR imagen")
         self.assertEqual(output["textos"][0]["confianza"], 95.0)
+        self.assertEqual(progress["estado"], "completado")
+        self.assertEqual(progress["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
+
+    def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
+        tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+            "5\t1\t1\t1\t1\t1\t0\t0\t10\t10\t90.0\tTexto\n"
+            "5\t1\t1\t1\t1\t2\t10\t0\t10\t10\t80.0\treconocido\n"
+        )
+        completed = subprocess.CompletedProcess([], 0, stdout=tsv, stderr="")
+        with (
+            patch("Codigo.ocr.shutil.which", return_value="tesseract") as which,
+            patch("Codigo.ocr.subprocess.run", return_value=completed) as run,
+        ):
+            text, confidence = _run_tesseract(Path("pagina.png"), "spa", "tesseract", True)
+
+        self.assertEqual(text, "Texto reconocido")
+        self.assertEqual(confidence, 85.0)
+        which.assert_called_once_with("tesseract")
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][-1], "tsv")
 
     def test_scanned_pdf_uses_ocr_when_the_pdf_page_has_no_digital_text(self) -> None:
         root = create_project()
@@ -92,7 +118,7 @@ class OCRTests(unittest.TestCase):
         (documents / "digital.pdf").write_bytes(b"not-read-in-this-test")
         (documents / "scan.png").write_bytes(b"not-read-in-this-test")
 
-        def extract(_path: Path, document, _configuration):  # type: ignore[no-untyped-def]
+        def extract(_path: Path, document, _configuration, _progress):  # type: ignore[no-untyped-def]
             page = 2 if document.nombre == "digital.pdf" else 1
             return [TextoExtraido(document.ubicacion_original, page, f"texto {document.nombre}", "prueba")]
 
@@ -117,7 +143,7 @@ class OCRTests(unittest.TestCase):
         (documents / "fallido.pdf").write_bytes(b"not-read-in-this-test")
         (documents / "correcto.jpg").write_bytes(b"not-read-in-this-test")
 
-        def extract(_path: Path, document, _configuration):  # type: ignore[no-untyped-def]
+        def extract(_path: Path, document, _configuration, _progress):  # type: ignore[no-untyped-def]
             if document.nombre == "fallido.pdf":
                 raise OCRExtractionError("motor OCR no disponible")
             return [TextoExtraido(document.ubicacion_original, 1, "texto recuperado", "prueba")]
