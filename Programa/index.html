@@ -371,36 +371,87 @@
         const btnUpload = document.getElementById('btn-upload');
         const fileInput = document.getElementById('file-input');
         const btnAnalyze = document.getElementById('btn-analyze');
+        const btnGenerate = document.getElementById('btn-generate');
+        const fileList = document.getElementById('file-list');
+        const dropzoneStatus = document.querySelector('.dropzone-status');
+        const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
-        const btnGenerate = document.getElementById('btn-generate');
 
-        btnUpload.addEventListener('click', () => {
+        const request = async (url, payload = {}) => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            return response.json();
+        };
+
+        const showMessage = (target, message) => {
+            target.textContent = message;
+        };
+
+        const renderDocuments = (documents) => {
+            fileList.replaceChildren();
+            for (const document of documents) {
+                const item = document.createElement('li');
+                item.className = 'file-item';
+                item.textContent = document.categoria
+                    ? `${document.nombre} (${document.categoria})`
+                    : document.nombre;
+                fileList.appendChild(item);
+            }
+        };
+
+        btnUpload.addEventListener('click', async () => {
+            try {
+                const result = await request('/api/proyectos/nuevo');
+                showMessage(outputSummary, result.mensaje);
+                showMessage(outputInfo, result.detalle);
+            } catch (_error) {
+                showMessage(outputSummary, 'No fue posible iniciar el proyecto.');
+            }
             fileInput.click();
         });
 
-        btnAnalyze.addEventListener('click', () => {
-            outputSummary.innerHTML = '<p style="color: #2b3674; font-size: 0.85rem;">Procesando resumen...</p>';
-            outputInfo.innerHTML = '<p style="color: #2b3674; font-size: 0.85rem;">Extrayendo entidades clave...</p>';
-            
-            setTimeout(() => {
-                outputSummary.innerHTML = `
-                    <p style="font-size: 0.85rem; line-height: 1.4; color: #334155;">
-                        Se revisaron 2 documentos contractuales. Se identifica un acuerdo marco con vigencia hasta diciembre y cláusulas de confidencialidad estándar.
-                    </p>
-                `;
-                outputInfo.innerHTML = `
-                    <ul style="font-size: 0.85rem; color: #334155; padding-left: 18px; line-height: 1.4;">
-                        <li><strong>Partes:</strong> Empresa A vs. Proveedor B</li>
-                        <li><strong>Monto Total:</strong> $45,000 USD</li>
-                        <li><strong>Jurisdicción:</strong> CDMX, México</li>
-                    </ul>
-                `;
-            }, 1500);
+        fileInput.addEventListener('change', async () => {
+            const selectedNames = Array.from(fileInput.files, file => file.name);
+            if (selectedNames.length === 0) {
+                return;
+            }
+
+            renderDocuments(selectedNames.map(nombre => ({nombre})));
+            dropzoneStatus.textContent = `${selectedNames.length} archivo(s) seleccionado(s).`;
+            actionHint.textContent = 'Validando expediente...';
+
+            try {
+                const result = await request('/api/expediente/seleccion', {documentos: selectedNames});
+                if (result.error || !Array.isArray(result.expediente?.documentos)) {
+                    throw new Error(result.error || 'La respuesta del expediente no es válida.');
+                }
+                renderDocuments(result.expediente.documentos);
+                dropzoneStatus.textContent = `${result.expediente.documentos.length} archivo(s) cargado(s) del expediente.`;
+                actionHint.textContent = result.detalle;
+                showMessage(outputSummary, result.mensaje);
+                showMessage(outputInfo, result.detalle);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'No fue posible cargar el expediente.';
+                actionHint.textContent = message;
+                showMessage(outputSummary, 'No fue posible confirmar el expediente.');
+                showMessage(outputInfo, message);
+            }
         });
 
-        btnGenerate.addEventListener('click', () => {
-            alert('Generando documento PDF/Word consolidado desde GIOJ...');
+        btnAnalyze.addEventListener('click', async () => {
+            const result = await request('/api/analisis/iniciar');
+            showMessage(outputSummary, result.mensaje);
+            showMessage(outputInfo, result.detalle);
+        });
+
+        btnGenerate.addEventListener('click', async () => {
+            const result = await request('/api/documento/generar');
+            showMessage(outputSummary, result.mensaje);
+            showMessage(outputInfo, result.detalle);
         });
     </script>
 </body>

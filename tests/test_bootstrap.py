@@ -12,7 +12,7 @@ from pathlib import Path
 
 from Codigo.bootstrap import initialize_project
 from Codigo.config import ConfigurationError, resolve_project_path
-from Codigo.web import CLIENT_CONNECTOR, create_server
+from Codigo.web import create_server
 
 
 SHEETS = {
@@ -108,7 +108,7 @@ class BootstrapTests(unittest.TestCase):
             address, port = server.server_address[:2]
             with urlopen(f"http://{address}:{port}/") as response:
                 delivered = response.read().decode("utf-8")
-            self.assertIn("/api/proyectos/nuevo", delivered)
+            self.assertEqual(delivered, original)
             self.assertEqual(interface.read_text(encoding="utf-8"), original)
         finally:
             server.shutdown()
@@ -134,10 +134,6 @@ class BootstrapTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
-
-    def test_interface_lists_selected_files_before_server_confirmation(self) -> None:
-        self.assertIn("Archivo seleccionado", CLIENT_CONNECTOR)
-        self.assertIn("Validando expediente", CLIENT_CONNECTOR)
 
 
 if __name__ == "__main__":

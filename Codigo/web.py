@@ -139,8 +139,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 if not interface_path.is_file():
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "Interfaz no encontrada"})
                     return
-                page = interface_path.read_text(encoding="utf-8")
-                body = page.replace("</body>", f"{CLIENT_CONNECTOR}</body>").encode("utf-8")
+                body = interface_path.read_bytes()
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
