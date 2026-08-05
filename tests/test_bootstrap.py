@@ -12,7 +12,7 @@ from pathlib import Path
 
 from Codigo.bootstrap import initialize_project
 from Codigo.config import ConfigurationError, resolve_project_path
-from Codigo.web import create_server
+from Codigo.web import CLIENT_CONNECTOR, create_server
 
 
 SHEETS = {
@@ -134,6 +134,10 @@ class BootstrapTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_interface_lists_selected_files_before_server_confirmation(self) -> None:
+        self.assertIn("Archivo seleccionado", CLIENT_CONNECTOR)
+        self.assertIn("Validando expediente", CLIENT_CONNECTOR)
 
 
 if __name__ == "__main__":

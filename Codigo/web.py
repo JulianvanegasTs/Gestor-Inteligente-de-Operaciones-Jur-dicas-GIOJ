@@ -61,6 +61,8 @@ CLIENT_CONNECTOR = """
     const firstPath = files[0]?.webkitRelativePath || '';
     const selectedDirectory = firstPath.split('/')[0];
     const expedienteId = selectedDirectory === '01_Documentos' ? '' : selectedDirectory;
+    renderDocuments(documents.map(nombre => ({nombre, categoria: 'Archivo seleccionado'})));
+    dropzoneStatus.textContent = `${documents.length} archivo(s) seleccionado(s). Validando expediente...`;
     try {
       const result = await request('/api/expediente/seleccion', {
         id_expediente: expedienteId,
