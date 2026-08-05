@@ -10,6 +10,7 @@ from typing import Any
 
 from .bootstrap import StartupReport, initialize_project
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
+from .ocr import OCRExtractionError, extract_expediente_text
 
 
 CLIENT_CONNECTOR = """
@@ -36,6 +37,7 @@ CLIENT_CONNECTOR = """
   const summary = document.getElementById('output-summary');
   const info = document.getElementById('output-info');
   const dropzoneStatus = document.querySelector('.dropzone-status');
+  let selectedExpedienteId = '';
   const show = (target, message) => { target.textContent = message; };
   const renderDocuments = (documents) => {
     fileList.textContent = '';
@@ -76,6 +78,7 @@ CLIENT_CONNECTOR = """
         return;
       }
       const registeredDocuments = result.expediente.documentos;
+      selectedExpedienteId = result.expediente.id;
       renderDocuments(registeredDocuments);
       dropzoneStatus.textContent = `${registeredDocuments.length} archivo(s) cargado(s) del expediente.`;
       hint.textContent = result.detalle;
@@ -87,7 +90,7 @@ CLIENT_CONNECTOR = """
     }
   });
   replaceButton('btn-analyze', async () => {
-    const result = await request('/api/analisis/iniciar');
+    const result = await request('/api/analisis/iniciar', {id_expediente: selectedExpedienteId});
     show(summary, result.mensaje);
     show(info, result.detalle);
   });
@@ -192,8 +195,29 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     },
                 })
                 return
+            if self.path == "/api/analisis/iniciar":
+                expediente_id = payload.get("id_expediente")
+                if not isinstance(expediente_id, str) or not expediente_id.strip():
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Seleccione un expediente antes de analizar."})
+                    return
+                try:
+                    result = extract_expediente_text(project_root, expediente_id)
+                except OCRExtractionError as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                self._send_json(HTTPStatus.OK, {
+                    "mensaje": "Texto documental extraído.",
+                    "detalle": f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es).",
+                    "ocr": {
+                        "archivo_salida": result.archivo_salida,
+                        "errores": [
+                            {"documento": item.documento, "pagina": item.pagina, "detalle": item.detalle}
+                            for item in result.errores
+                        ],
+                    },
+                })
+                return
             pending = {
-                "/api/analisis/iniciar": ("Análisis pendiente.", "La lectura, OCR y análisis se implementarán en GIOJ-003 a GIOJ-010."),
                 "/api/documento/generar": ("Generación pendiente.", "La generación documental se implementará en GIOJ-012 y GIOJ-013."),
             }
             if self.path in pending:

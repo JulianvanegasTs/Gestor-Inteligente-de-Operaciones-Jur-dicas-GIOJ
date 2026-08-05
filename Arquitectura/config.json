@@ -47,7 +47,11 @@
     "permitir_pdf_digital": true,
     "permitir_pdf_escaneado": true,
     "permitir_imagenes": true,
-    "registrar_confianza": true
+    "registrar_confianza": true,
+    "comando_tesseract": "tesseract",
+    "comando_renderizador_pdf": "pdftoppm",
+    "resolucion_pdf": 300,
+    "archivo_salida": "texto_extraido.json"
   },
 
   "analisis": {
