@@ -377,6 +377,7 @@
         const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
+        let selectedExpedienteId = '';
 
         const request = async (url, payload = {}) => {
             const response = await fetch(url, {
@@ -430,6 +431,7 @@
                     throw new Error(result.error || 'La respuesta del expediente no es válida.');
                 }
                 renderDocuments(result.expediente.documentos);
+                selectedExpedienteId = result.expediente.id;
                 dropzoneStatus.textContent = `${result.expediente.documentos.length} archivo(s) cargado(s) del expediente.`;
                 actionHint.textContent = result.detalle;
                 showMessage(outputSummary, result.mensaje);
@@ -443,9 +445,18 @@
         });
 
         btnAnalyze.addEventListener('click', async () => {
-            const result = await request('/api/analisis/iniciar');
-            showMessage(outputSummary, result.mensaje);
-            showMessage(outputInfo, result.detalle);
+            try {
+                const result = await request('/api/analisis/iniciar', {id_expediente: selectedExpedienteId});
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                showMessage(outputSummary, result.mensaje);
+                showMessage(outputInfo, result.detalle);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
+                showMessage(outputSummary, 'No fue posible extraer el texto documental.');
+                showMessage(outputInfo, message);
+            }
         });
 
         btnGenerate.addEventListener('click', async () => {

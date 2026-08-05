@@ -207,7 +207,10 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     return
                 self._send_json(HTTPStatus.OK, {
                     "mensaje": "Texto documental extraído.",
-                    "detalle": f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es).",
+                    "detalle": (
+                        f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
+                        f"Resultado: {result.archivo_salida}"
+                    ),
                     "ocr": {
                         "archivo_salida": result.archivo_salida,
                         "errores": [

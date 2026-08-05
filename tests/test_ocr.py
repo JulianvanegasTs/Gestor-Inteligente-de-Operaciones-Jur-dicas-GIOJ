@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.request import Request, urlopen
 
 from Codigo.config import load_configuration
 from Codigo.expediente import DocumentoExpediente
 from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, extract_expediente_text
+from Codigo.web import create_server
 
 
 def create_project() -> Path:
@@ -25,6 +28,42 @@ def create_project() -> Path:
 
 
 class OCRTests(unittest.TestCase):
+    def test_analysis_endpoint_runs_ocr_and_reports_the_output_file(self) -> None:
+        root = create_project()
+        documents = root / "Expedientes" / "EXP-WEB" / "01_Documentos"
+        documents.mkdir(parents=True)
+        (documents / "imagen.png").write_bytes(b"not-read-in-this-test")
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            request = Request(
+                f"http://{address}:{port}/api/analisis/iniciar",
+                data=json.dumps({"id_expediente": "EXP-WEB"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            extracted = TextoExtraido(
+                "Expedientes/EXP-WEB/01_Documentos/imagen.png", 1, "texto visible", "OCR imagen", 95.0
+            )
+            with patch("Codigo.ocr._extract_document", return_value=[extracted]):
+                with urlopen(request) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertEqual(payload["mensaje"], "Texto documental extraído.")
+        self.assertEqual(payload["ocr"]["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
+        self.assertIn("Resultado: Salida/EXP-WEB/texto_extraido.json", payload["detalle"])
+        output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
+        self.assertEqual(output["textos"][0]["documento"], extracted.documento)
+        self.assertEqual(output["textos"][0]["pagina"], 1)
+        self.assertEqual(output["textos"][0]["texto"], "texto visible")
+        self.assertEqual(output["textos"][0]["metodo"], "OCR imagen")
+        self.assertEqual(output["textos"][0]["confianza"], 95.0)
+
     def test_scanned_pdf_uses_ocr_when_the_pdf_page_has_no_digital_text(self) -> None:
         root = create_project()
         source = root / "Expedientes" / "EXP-000" / "01_Documentos" / "escaneado.pdf"
