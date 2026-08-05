@@ -35,7 +35,17 @@ CLIENT_CONNECTOR = """
   const fileList = document.getElementById('file-list');
   const summary = document.getElementById('output-summary');
   const info = document.getElementById('output-info');
+  const dropzoneStatus = document.querySelector('.dropzone-status');
   const show = (target, message) => { target.textContent = message; };
+  const renderDocuments = (documents) => {
+    fileList.textContent = '';
+    for (const document of documents) {
+      const item = document.createElement('li');
+      item.className = 'file-item';
+      item.textContent = `${document.nombre} (${document.categoria})`;
+      fileList.appendChild(item);
+    }
+  };
 
   replaceButton('btn-upload', async () => {
     const result = await request('/api/proyectos/nuevo');
@@ -50,24 +60,28 @@ CLIENT_CONNECTOR = """
     const documents = files.map(file => file.name);
     const firstPath = files[0]?.webkitRelativePath || '';
     const expedienteId = firstPath.split('/')[0];
-    const result = await request('/api/expediente/seleccion', {
-      id_expediente: expedienteId,
-      documentos: documents
-    });
-    if (result.error) {
+    try {
+      const result = await request('/api/expediente/seleccion', {
+        id_expediente: expedienteId,
+        documentos: documents
+      });
+      if (result.error || !Array.isArray(result.expediente?.documentos)) {
+        const message = result.error || 'La respuesta del expediente no es válida.';
+        show(summary, 'No fue posible cargar el expediente.');
+        show(info, message);
+        hint.textContent = message;
+        return;
+      }
+      const registeredDocuments = result.expediente.documentos;
+      renderDocuments(registeredDocuments);
+      dropzoneStatus.textContent = `${registeredDocuments.length} archivo(s) cargado(s) del expediente.`;
+      hint.textContent = result.detalle;
+    } catch (_error) {
+      const message = 'No fue posible comunicarse con el lector del expediente.';
       show(summary, 'No fue posible cargar el expediente.');
-      show(info, result.error);
-      hint.textContent = result.error;
-      return;
+      show(info, message);
+      hint.textContent = message;
     }
-    const registeredDocuments = result.expediente.documentos;
-    fileList.replaceChildren(...registeredDocuments.map(document => {
-      const item = document.createElement('li');
-      item.className = 'file-item';
-      item.textContent = document.nombre;
-      return item;
-    }));
-    hint.textContent = result.detalle;
   });
   replaceButton('btn-analyze', async () => {
     const result = await request('/api/analisis/iniciar');
