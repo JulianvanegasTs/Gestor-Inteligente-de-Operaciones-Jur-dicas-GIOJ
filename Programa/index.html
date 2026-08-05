@@ -249,6 +249,57 @@
             margin-bottom: 8px;
         }
 
+        .analysis-progress {
+            background: #f8fafc;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .analysis-progress-header,
+        .analysis-progress-time {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.78rem;
+            color: #475569;
+        }
+
+        .analysis-progress-stage {
+            color: #1e3a5f;
+            font-weight: 700;
+        }
+
+        .analysis-progress-track {
+            height: 12px;
+            margin: 9px 0;
+            overflow: hidden;
+            background: #dbe4f0;
+            border-radius: 999px;
+        }
+
+        .analysis-progress-fill {
+            width: 0;
+            height: 100%;
+            background: linear-gradient(90deg, #2563eb, #22c55e);
+            border-radius: inherit;
+            transition: width 0.45s ease;
+        }
+
+        .analysis-progress-detail {
+            min-height: 1.2em;
+            margin-bottom: 6px;
+            overflow: hidden;
+            color: #64748b;
+            font-size: 0.75rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .analysis-progress.is-error .analysis-progress-fill {
+            background: #dc2626;
+        }
+
         .placeholder-line {
             height: 10px;
             background-color: #cbd5e1;
@@ -365,6 +416,29 @@
                 <div class="placeholder-line w-100"></div>
                 <div class="placeholder-line w-60"></div>
             </div>
+
+            <div class="analysis-progress" id="analysis-progress" hidden aria-live="polite">
+                <div class="analysis-progress-header">
+                    <span class="analysis-progress-stage" id="progress-stage">Preparando el expediente</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div
+                    class="analysis-progress-track"
+                    id="progress-track"
+                    role="progressbar"
+                    aria-label="Progreso del análisis documental"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="0"
+                >
+                    <div class="analysis-progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="analysis-progress-detail" id="progress-detail">Calculando documentos…</div>
+                <div class="analysis-progress-time">
+                    <span id="progress-elapsed">Transcurrido: 0 s</span>
+                    <span id="progress-remaining">Restante: calculando…</span>
+                </div>
+            </div>
             
             <button class="btn-generate-doc" id="btn-generate">
                 📄 Generar Documento
@@ -388,7 +462,22 @@
         const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
+        const progressContainer = document.getElementById('analysis-progress');
+        const progressStage = document.getElementById('progress-stage');
+        const progressPercent = document.getElementById('progress-percent');
+        const progressTrack = document.getElementById('progress-track');
+        const progressFill = document.getElementById('progress-fill');
+        const progressDetail = document.getElementById('progress-detail');
+        const progressElapsed = document.getElementById('progress-elapsed');
+        const progressRemaining = document.getElementById('progress-remaining');
         let selectedExpedienteId = '';
+
+        const formatDuration = totalSeconds => {
+            const seconds = Math.max(0, Math.round(totalSeconds));
+            const minutes = Math.floor(seconds / 60);
+            const remainder = seconds % 60;
+            return minutes > 0 ? `${minutes} min ${remainder} s` : `${remainder} s`;
+        };
 
         const request = async (url, payload = {}) => {
             const response = await fetch(url, {
@@ -464,6 +553,15 @@
             const startedAt = Date.now();
             btnAnalyze.disabled = true;
             btnAnalyze.textContent = 'ANALIZANDO…';
+            progressContainer.hidden = false;
+            progressContainer.classList.remove('is-error');
+            progressFill.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressTrack.setAttribute('aria-valuenow', '0');
+            progressStage.textContent = 'Preparando el expediente';
+            progressDetail.textContent = 'Calculando documentos y páginas…';
+            progressElapsed.textContent = 'Transcurrido: 0 s';
+            progressRemaining.textContent = 'Restante: calculando…';
             showMessage(outputSummary, 'Extracción documental en curso.');
             showMessage(outputInfo, 'Preparando el expediente…');
             const showProgress = async () => {
@@ -476,6 +574,28 @@
                     const documentName = progress.documento ? progress.documento.split('/').pop() : '';
                     const page = progress.pagina ? ` · Página ${progress.pagina}` : '';
                     const location = documentName ? `\n${documentName}${page}` : '';
+                    const completed = Number(progress.completadas || 0);
+                    const total = Number(progress.total || 0);
+                    const completedState = progress.estado === 'completado';
+                    const percentage = completedState
+                        ? 100
+                        : total > 0 ? Math.min(99, Math.floor((completed / total) * 100)) : 0;
+                    const remainingSeconds = completed > 0 && total > completed
+                        ? (elapsedSeconds / completed) * (total - completed)
+                        : 0;
+                    progressFill.style.width = `${percentage}%`;
+                    progressPercent.textContent = `${percentage}%`;
+                    progressTrack.setAttribute('aria-valuenow', String(percentage));
+                    progressStage.textContent = progress.etapa || 'Validando documentación…';
+                    progressDetail.textContent = documentName
+                        ? `${documentName}${page}`
+                        : `${completed} de ${total || '?'} páginas procesadas`;
+                    progressElapsed.textContent = `Transcurrido: ${formatDuration(elapsedSeconds)}`;
+                    progressRemaining.textContent = completedState
+                        ? 'Restante: 0 s'
+                        : remainingSeconds > 0
+                            ? `Restante estimado: ${formatDuration(remainingSeconds)}`
+                            : 'Restante: calculando…';
                     showMessage(
                         outputInfo,
                         `${progress.etapa || 'Validando documentación…'}${location}\nTiempo transcurrido: ${elapsedSeconds} s`
@@ -493,10 +613,19 @@
                 }
                 showMessage(outputSummary, result.mensaje);
                 showMessage(outputInfo, result.detalle);
+                progressFill.style.width = '100%';
+                progressPercent.textContent = '100%';
+                progressTrack.setAttribute('aria-valuenow', '100');
+                progressStage.textContent = 'Extracción documental completada';
+                progressDetail.textContent = result.ocr.archivo_salida;
+                progressRemaining.textContent = 'Restante: 0 s';
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
                 showMessage(outputSummary, 'No fue posible extraer el texto documental.');
                 showMessage(outputInfo, message);
+                progressContainer.classList.add('is-error');
+                progressStage.textContent = 'El análisis terminó con error';
+                progressDetail.textContent = message;
             } finally {
                 window.clearInterval(progressTimer);
                 btnAnalyze.disabled = false;

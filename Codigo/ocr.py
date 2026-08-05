@@ -26,7 +26,8 @@ class OCRExtractionError(RuntimeError):
     """Indica que un documento no pudo procesarse sin comprometer el expediente."""
 
 
-ProgressCallback = Callable[[str, int | None, str], None]
+DocumentProgressCallback = Callable[[str, int | None, str], None]
+ProgressCallback = Callable[[str, int | None, int, int, str], None]
 
 
 @dataclass(frozen=True)
@@ -155,7 +156,7 @@ def _extract_pdf(
     path: Path,
     document: DocumentoExpediente,
     configuration: ProjectConfiguration,
-    progress: ProgressCallback | None = None,
+    progress: DocumentProgressCallback | None = None,
 ) -> list[TextoExtraido]:
     pages = _read_digital_pdf(path)
     language = str(_ocr_setting(configuration, "idioma", "spa"))
@@ -189,7 +190,7 @@ def _extract_image(
     path: Path,
     document: DocumentoExpediente,
     configuration: ProjectConfiguration,
-    progress: ProgressCallback | None = None,
+    progress: DocumentProgressCallback | None = None,
 ) -> list[TextoExtraido]:
     if not bool(_ocr_setting(configuration, "permitir_imagenes", True)):
         raise OCRExtractionError("El OCR de imágenes está deshabilitado en la configuración")
@@ -205,7 +206,7 @@ def _extract_image(
 
 
 def _extract_docx(
-    path: Path, document: DocumentoExpediente, progress: ProgressCallback | None = None
+    path: Path, document: DocumentoExpediente, progress: DocumentProgressCallback | None = None
 ) -> list[TextoExtraido]:
     """Conserva el texto Word existente como una página lógica de evidencia."""
     if progress:
@@ -225,7 +226,7 @@ def _extract_document(
     path: Path,
     document: DocumentoExpediente,
     configuration: ProjectConfiguration,
-    progress: ProgressCallback | None = None,
+    progress: DocumentProgressCallback | None = None,
 ) -> list[TextoExtraido]:
     if document.categoria == "PDF":
         return _extract_pdf(path, document, configuration, progress)
@@ -250,6 +251,18 @@ def _write_result(configuration: ProjectConfiguration, result: ResultadoOCR) -> 
     return target
 
 
+def _document_work_units(path: Path, document: DocumentoExpediente) -> int:
+    """Calcula unidades de avance sin extraer ni modificar contenido."""
+    if document.categoria != "PDF":
+        return 1
+    try:
+        from pypdf import PdfReader
+
+        return max(1, len(PdfReader(str(path)).pages))
+    except Exception:
+        return 1
+
+
 def extract_expediente_text(
     project_root: Path, expediente_id: str, progress: ProgressCallback | None = None
 ) -> ResultadoOCR:
@@ -263,7 +276,7 @@ def extract_expediente_text(
     texts: list[TextoExtraido] = []
     errors: list[ErrorOCR] = []
     initial = ResultadoOCR(expediente.id_expediente, (), (), "")
-    output = _write_result(configuration, initial)
+    _write_result(configuration, initial)
     if not bool(_ocr_setting(configuration, "habilitado", True)):
         detail = "El OCR está deshabilitado en la configuración"
         errors.extend(ErrorOCR(item.ubicacion_original, None, detail) for item in expediente.documentos)
@@ -272,26 +285,73 @@ def extract_expediente_text(
         provisional = ResultadoOCR(expediente.id_expediente, (), tuple(errors), "")
         output = _write_result(configuration, provisional)
         return ResultadoOCR(expediente.id_expediente, (), tuple(errors), output.relative_to(configuration.project_root).as_posix())
-    for document in expediente.documentos:
+    documents_with_units = [
+        (
+            document,
+            _document_work_units(_source_path(configuration, document), document) if progress else 1,
+        )
+        for document in expediente.documentos
+    ]
+    total_units = sum(units for _, units in documents_with_units)
+    completed_units = 0
+    if progress:
+        progress("", None, 0, total_units, "Preparando el expediente")
+    for document, document_units in documents_with_units:
         if progress:
-            progress(document.ubicacion_original, None, "Iniciando documento")
+            progress(
+                document.ubicacion_original,
+                None,
+                completed_units,
+                total_units,
+                "Iniciando documento",
+            )
+
+        def report_document_progress(documento: str, pagina: int | None, etapa: str) -> None:
+            page_offset = max(0, min(document_units, (pagina or 1) - 1))
+            if progress:
+                progress(
+                    documento,
+                    pagina,
+                    completed_units + page_offset,
+                    total_units,
+                    etapa,
+                )
+
         try:
-            extracted = _extract_document(_source_path(configuration, document), document, configuration, progress)
+            extracted = _extract_document(
+                _source_path(configuration, document), document, configuration, report_document_progress
+            )
         except OCRExtractionError as error:
             errors.append(ErrorOCR(document.ubicacion_original, None, str(error)))
             logger.error("OCR ERROR | %s | %s", document.ubicacion_original, error)
             _write_result(
                 configuration, ResultadoOCR(expediente.id_expediente, tuple(texts), tuple(errors), "")
             )
+            completed_units += document_units
+            if progress:
+                progress(
+                    document.ubicacion_original,
+                    None,
+                    completed_units,
+                    total_units,
+                    "Documento finalizado con error",
+                )
             continue
         texts.extend(extracted)
         for item in extracted:
             logger.info("TEXTO EXTRAIDO | %s | pagina=%s | metodo=%s", item.documento, item.pagina, item.metodo)
         _write_result(configuration, ResultadoOCR(expediente.id_expediente, tuple(texts), tuple(errors), ""))
+        completed_units += document_units
+        if progress:
+            progress(
+                document.ubicacion_original,
+                None,
+                completed_units,
+                total_units,
+                "Documento completado",
+            )
     provisional = ResultadoOCR(expediente.id_expediente, tuple(texts), tuple(errors), "")
     output = _write_result(configuration, provisional)
     relative_output = output.relative_to(configuration.project_root).as_posix()
     logger.info("OCR COMPLETADO | %s | %s texto(s) | %s error(es)", expediente.id_expediente, len(texts), len(errors))
     return ResultadoOCR(expediente.id_expediente, tuple(texts), tuple(errors), relative_output)
-    if progress:
-        progress(document.ubicacion_original, 1, "Extrayendo texto del documento Word")

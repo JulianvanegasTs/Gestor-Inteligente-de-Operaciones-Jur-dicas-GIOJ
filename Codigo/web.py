@@ -224,13 +224,21 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     pagina=None,
                 )
 
-                def report_progress(documento: str, pagina: int | None, etapa: str) -> None:
+                def report_progress(
+                    documento: str,
+                    pagina: int | None,
+                    completadas: int,
+                    total: int,
+                    etapa: str,
+                ) -> None:
                     update_analysis_state(
                         expediente_id,
                         estado="procesando",
                         etapa=etapa,
-                        documento=documento,
+                        documento=documento or None,
                         pagina=pagina,
+                        completadas=completadas,
+                        total=total,
                     )
 
                 try:

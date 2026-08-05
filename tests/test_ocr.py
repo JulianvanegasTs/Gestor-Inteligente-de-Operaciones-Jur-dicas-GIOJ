@@ -70,6 +70,17 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(output["textos"][0]["confianza"], 95.0)
         self.assertEqual(progress["estado"], "completado")
         self.assertEqual(progress["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
+        self.assertEqual(progress["completadas"], 1)
+        self.assertEqual(progress["total"], 1)
+
+    def test_official_interface_contains_accessible_progress_bar_and_time_estimate(self) -> None:
+        interface = (Path(__file__).parent.parent / "Programa" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn('id="analysis-progress"', interface)
+        self.assertIn('role="progressbar"', interface)
+        self.assertIn('id="progress-percent"', interface)
+        self.assertIn('id="progress-remaining"', interface)
+        self.assertIn("Restante estimado", interface)
 
     def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
         tsv = (
