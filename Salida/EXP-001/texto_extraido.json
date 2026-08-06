@@ -1,0 +1,13 @@
+{
+  "id_expediente": "EXP-001",
+  "textos": [
+    {
+      "documento": "Expedientes/EXP-001/01_Documentos/Cédula Fotocopia.pdf",
+      "pagina": 1,
+      "texto": "REPUBLICA DE COLOMBIA\nIDENTIFICACION PERSONAL\nCEDULA DE CIUDADANIA\n1.032.424.734\nNUMERO\nVANEGAS LEGUIZAMO\nAPELLIDOS\ne\n; A\nJULIAN MAURICIO\n¿ ¿/ÁDMBRES\n1\n5/\nREGISTRAD C\nJUN ARLOS GALINDO Y A\nIA dell.\nP-1500113-45156754-M-1032424784-20070219 03116070508 02 227645972",
+      "metodo": "OCR PDF escaneado",
+      "confianza": 66.8
+    }
+  ],
+  "errores": []
+}
