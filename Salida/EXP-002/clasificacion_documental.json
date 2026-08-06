@@ -1,0 +1,116 @@
+{
+  "id_expediente": "EXP-002",
+  "documentos": [
+    {
+      "documento": "Expedientes/EXP-002/01_Documentos/ESCRITURA SR CARLOS PINILLA.pdf",
+      "tipo_documental": "Minuta Hipoteca",
+      "codigo_tipo_documental": "Minuta_Hipoteca",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 7,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 8,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 11,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 12,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 16,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 17,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 18,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 19,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 20,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 21,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 22,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 23,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 24,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 29,
+          "valor_encontrado": "ECOPETROL S.A."
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    },
+    {
+      "documento": "Expedientes/EXP-002/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00516 - CARLOS ANDRES PINILLA VELASQUEZ y YULI STEPHANI TIBOCHA ARDILA.pdf",
+      "tipo_documental": "Certificado de Tradición",
+      "codigo_tipo_documental": "DOC_CTL",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "Lote"
+        },
+        {
+          "pagina": 2,
+          "valor_encontrado": "Lote"
+        },
+        {
+          "pagina": 3,
+          "valor_encontrado": "Certificado de Tradición"
+        },
+        {
+          "pagina": 4,
+          "valor_encontrado": "Certificado de Tradición"
+        },
+        {
+          "pagina": 5,
+          "valor_encontrado": "Oficina"
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    },
+    {
+      "documento": "Expedientes/EXP-002/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CARLOS ANDRES PINILLA VELASQUEZ.docx",
+      "tipo_documental": "Minuta Hipoteca",
+      "codigo_tipo_documental": "Minuta_Hipoteca",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "FONDO DE EMPLEADOS DE LOS TRABAJADORES Y PENSIONADOS DEL GRUPO ECOPETROL - CAVIPETROL"
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    }
+  ]
+}

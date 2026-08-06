@@ -1,0 +1,934 @@
+{
+  "id_expediente": "EXP-001",
+  "campos": [
+    {
+      "id_campo": "INM-001",
+      "nivel": "Entidad",
+      "campo_padre": null,
+      "entidad": "Inmueble",
+      "campo": "Inmuebles",
+      "descripcion": "Información de todos los inmuebles relacionados con el expediente.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": null,
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-036"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "les (s) que, por su extensión, medidas y",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 9,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.43,
+          "evidencia_textual": "ECOPETROL S.A. sobre el (los) inmuebles (s) que, por su extensión, medidas y"
+        },
+        {
+          "valor_encontrado": "que se han alinderado y los que existan",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 10,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.59,
+          "evidencia_textual": "existan en la actualidad en los inmuebles que se han alinderado y los que existan"
+        },
+        {
+          "valor_encontrado": "sobre el (los) inmuebles (s) que, por su extensión, medidas y demás especificaciones se describe (n) a continuación",
+          "documento": "Expedientes/EXP-001/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CRISTIAN RIVERA CAMARGO.docx",
+          "pagina": 1,
+          "metodo": "Documento Word",
+          "confianza": null,
+          "evidencia_textual": "PRIMERA. CONSTITUCIÓN GRAVAMEN- Que para garantizar a ECOPETROL S,A., legalmente constituida, con domicilio principal en la ciudad de Bogotá D.C., con número de identificación tributaria NIT 899.999.068-1, parte que en lo sucesivo y para todos los efectos legales se denominará ECOPETROL S.A., el pago las obligaciones que por cualquier motivo tuviere conjunta o separadamente, directa o indirectamente a favor de ECOPETROL S.A, por cualquiera de las líneas de crédito que maneja ECOPETROL S.A.,  y para respaldar las deudas contraídas  con anterioridad, personalmente o con solidaridad de terceros, aunque su vencimiento sea anterior y posterior a la constitución del presente gravamen, así como para garantizar el cumplimiento que a su cargo resulten por el otorgamiento de los respectivos préstamos, además de comprometer su propia responsabilidad personal y acogiéndose a lo establecido en los artículos 2.438 y 2.455 de Código Civil, CONSTITUYE HIPOTECA ABIERTA Y SIN LIMITE DE CUANTIA a favor de ECOPETROL S.A.  sobre el (los) inmuebles (s) que, por su extensión, medidas y demás especificaciones se describe (n) a continuación:"
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "INM-002",
+      "nivel": "Atributo",
+      "campo_padre": "Inmuebles",
+      "entidad": "Inmueble",
+      "campo": "Tipo_Inmueble",
+      "descripcion": "Clasificación del inmueble identificado.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Tipo_Inmueble",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-001"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "INM-003",
+      "nivel": "Atributo",
+      "campo_padre": "Inmuebles",
+      "entidad": "Inmueble",
+      "campo": "Matricula",
+      "descripcion": "Número de matrícula inmobiliaria del inmueble.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-002",
+        "EXT-027"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "(S)",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 1,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "MATRÍCULA (S)"
+        },
+        {
+          "valor_encontrado": "230-77054",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 3,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "el folio de matrícula No. 230-77054."
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "INM-004",
+      "nivel": "Atributo",
+      "campo_padre": "Inmuebles",
+      "entidad": "Inmueble",
+      "campo": "Direccion",
+      "descripcion": "Dirección del inmueble.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-003",
+        "EXT-028"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "Carrera 9 No. 12B -12 - Oficina 702",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 1,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "DIRECCIÓN: Carrera 9 No. 12B -12 - Oficina 702."
+        },
+        {
+          "valor_encontrado": "Carrera 9 No. 12B -12 - Oficina 702",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 2,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "DIRECCIÓN: Carrera 9 No. 12B -12 - Oficina 702."
+        },
+        {
+          "valor_encontrado": "Carrera 9 No. 12B -12 - Oficina 702",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 3,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "DIRECCIÓN: Carrera 9 No. 12B -12 - Oficina 702."
+        },
+        {
+          "valor_encontrado": "Carrera 9 No. 12B -12 - Oficina 702",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 4,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "DIRECCIÓN: Carrera 9 No. 12B -12 - Oficina 702."
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "INM-005",
+      "nivel": "Atributo",
+      "campo_padre": "Inmuebles",
+      "entidad": "Inmueble",
+      "campo": "Area",
+      "descripcion": "Área registrada del inmueble.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-004"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "CONSTRUIDA 181.40 M2",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 1,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "TOTAL ÁREA CONSTRUIDA 181.40 M2"
+        },
+        {
+          "valor_encontrado": "S DE TERRENO -PRIVADA Y",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 2,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "ÁREAS DE TERRENO -PRIVADA Y"
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "INM-006",
+      "nivel": "Atributo",
+      "campo_padre": "Inmuebles",
+      "entidad": "Inmueble",
+      "campo": "Linderos",
+      "descripcion": "Descripción jurídica de los linderos.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-005"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "PER-001",
+      "nivel": "Entidad",
+      "campo_padre": null,
+      "entidad": "Persona",
+      "campo": "Intervinientes",
+      "descripcion": "Personas naturales o jurídicas que participan en el expediente.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": null,
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-035"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "PER-002",
+      "nivel": "Atributo",
+      "campo_padre": "Intervinientes",
+      "entidad": "Persona",
+      "campo": "Nombre",
+      "descripcion": "Nombre completo del interviniente.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-024",
+        "EXT-006"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "PER-003",
+      "nivel": "Atributo",
+      "campo_padre": "Intervinientes",
+      "entidad": "Persona",
+      "campo": "Tipo_Documento",
+      "descripcion": "Tipo de identificación del interviniente.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Tipo_Documento",
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-007"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "PER-004",
+      "nivel": "Atributo",
+      "campo_padre": "Intervinientes",
+      "entidad": "Persona",
+      "campo": "Numero_Documento",
+      "descripcion": "Número de identificación del interviniente.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-026",
+        "EXT-008"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "PER-005",
+      "nivel": "Atributo",
+      "campo_padre": "Intervinientes",
+      "entidad": "Persona",
+      "campo": "Rol",
+      "descripcion": "Rol jurídico del interviniente dentro del expediente.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Rol_Persona",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-025",
+        "EXT-009",
+        "EXT-040"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "S.A. NIT 899.999.068-1",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 1,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 88.1,
+          "evidencia_textual": "ECOPETROL S.A. NIT 899.999.068-1"
+        },
+        {
+          "valor_encontrado": "la en dos niveles sometida a las restricciones de uso",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 2,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.64,
+          "evidencia_textual": "unifamiliar se desarrolla en dos niveles sometida a las restricciones de uso"
+        },
+        {
+          "valor_encontrado": "Valence AV a en la escritura pública - No tiene costo para el usuario",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 5,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 91.45,
+          "evidencia_textual": "pahsaoreblada ha qrarerol: Valence AV a en la escritura pública - No tiene costo para el usuario"
+        },
+        {
+          "valor_encontrado": "S.A, AL COMPRADOR CRISTIAN RIVERA CAMARGO",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 6,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.07,
+          "evidencia_textual": "aprobado por ECOPETROL S.A, AL COMPRADOR CRISTIAN RIVERA CAMARGO,"
+        },
+        {
+          "valor_encontrado": "A CECILIA GARNICA FARAK, mayor de edad",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 8,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.07,
+          "evidencia_textual": "de su cónyuge CAROLA CECILIA GARNICA FARAK, mayor de edad,"
+        },
+        {
+          "valor_encontrado": "S.A, por cualquiera de las líneas",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 9,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.43,
+          "evidencia_textual": "directa o indirectamente a favor de ECOPETROL S.A, por cualquiera de las líneas"
+        },
+        {
+          "valor_encontrado": "S.A. todas las obligaciones, presentes o futuras hasta su",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 11,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.84,
+          "evidencia_textual": "asegurar a ECOPETROL S.A. todas las obligaciones, presentes o futuras hasta su"
+        },
+        {
+          "valor_encontrado": "S.A. no sólo las obligaciones contraídas con posterioridad a la",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 12,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.64,
+          "evidencia_textual": "a ECOPETROL S.A. no sólo las obligaciones contraídas con posterioridad a la"
+        },
+        {
+          "valor_encontrado": "S.A",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 13,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 89.0,
+          "evidencia_textual": "ofrezca reparo alguno por parte de ECOPETROL S.A."
+        },
+        {
+          "valor_encontrado": "L S.A., podrá exigir anticipadamente el pago de todas y",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 14,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.64,
+          "evidencia_textual": "obligaciones, ECOPETROL S.A., podrá exigir anticipadamente el pago de todas y"
+        },
+        {
+          "valor_encontrado": "6$S.A., opta expresamente por esta alternativa, le entregue",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 15,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 91.55,
+          "evidencia_textual": "ECOPETROL 6$S.A., opta expresamente por esta alternativa, le entregue"
+        },
+        {
+          "valor_encontrado": "S.A., téngase en cuenta que de",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 16,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 93.94,
+          "evidencia_textual": "Si el préstamo fue adjudicado por ECOPETROL S.A., téngase en cuenta que de"
+        },
+        {
+          "valor_encontrado": "S.A., pues este crédito se ha otorgado por la circunstancia",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 17,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.4,
+          "evidencia_textual": "favor de ECOPETROL S.A., pues este crédito se ha otorgado por la circunstancia"
+        },
+        {
+          "valor_encontrado": "S.A., seguros de vida, incendio",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 18,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.35,
+          "evidencia_textual": "constituir a su cargo y a favor de ECOPETROL S.A., seguros de vida, incendio"
+        },
+        {
+          "valor_encontrado": "OL persona jurídica constituida legalmente con número",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 19,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.54,
+          "evidencia_textual": "Bogotá D.C., de CAVIPETROL persona jurídica constituida legalmente con número"
+        },
+        {
+          "valor_encontrado": "L S.A. de",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 20,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 93.85,
+          "evidencia_textual": "LILIANA AGUIRRE VALLEJO, en representación del ECOPETROL S.A. de"
+        },
+        {
+          "valor_encontrado": "S.A. “CAVIPETROL”",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 25,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 79.64,
+          "evidencia_textual": "TRABAJADORES Y PENSIONADOS DE ECOPETROL S.A. “CAVIPETROL”"
+        },
+        {
+          "valor_encontrado": "OL S,A., legalmente constituida, con domicilio principal en la ciudad de Bogotá D.C., con número de identificación tributaria NIT 899.999.068-1, parte que en lo sucesivo y para todos los efectos legales se denominará ECOPETROL S.A., el pago las obligaciones que por cualquier motivo tuviere conjunta o separadamente, directa o indirectamente a favor de ECOPETROL S.A, por cualquiera de las líneas de crédito que maneja ECOPETROL S.A",
+          "documento": "Expedientes/EXP-001/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CRISTIAN RIVERA CAMARGO.docx",
+          "pagina": 1,
+          "metodo": "Documento Word",
+          "confianza": null,
+          "evidencia_textual": "PRIMERA. CONSTITUCIÓN GRAVAMEN- Que para garantizar a ECOPETROL S,A., legalmente constituida, con domicilio principal en la ciudad de Bogotá D.C., con número de identificación tributaria NIT 899.999.068-1, parte que en lo sucesivo y para todos los efectos legales se denominará ECOPETROL S.A., el pago las obligaciones que por cualquier motivo tuviere conjunta o separadamente, directa o indirectamente a favor de ECOPETROL S.A, por cualquiera de las líneas de crédito que maneja ECOPETROL S.A.,  y para respaldar las deudas contraídas  con anterioridad, personalmente o con solidaridad de terceros, aunque su vencimiento sea anterior y posterior a la constitución del presente gravamen, así como para garantizar el cumplimiento que a su cargo resulten por el otorgamiento de los respectivos préstamos, además de comprometer su propia responsabilidad personal y acogiéndose a lo establecido en los artículos 2.438 y 2.455 de Código Civil, CONSTITUYE HIPOTECA ABIERTA Y SIN LIMITE DE CUANTIA a favor de ECOPETROL S.A.  sobre el (los) inmuebles (s) que, por su extensión, medidas y demás especificaciones se describe (n) a continuación:"
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "PER-006",
+      "nivel": "Atributo",
+      "campo_padre": "Intervinientes",
+      "entidad": "Persona",
+      "campo": "Direccion_Notificaciones",
+      "descripcion": "Dirección registrada para notificaciones.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-010"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "CRE-001",
+      "nivel": "Entidad",
+      "campo_padre": null,
+      "entidad": "Crédito",
+      "campo": "Créditos",
+      "descripcion": "Información de los créditos asociados al expediente.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": null,
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-037"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "de vivienda de",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 6,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.07,
+          "evidencia_textual": "el cual Cavipetrol como entidad administradora de los créditos de vivienda de"
+        },
+        {
+          "valor_encontrado": "s que",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 12,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.64,
+          "evidencia_textual": "manera que, con esta garantía se respalden igualmente los créditos que"
+        },
+        {
+          "valor_encontrado": "por parte del",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 15,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 91.55,
+          "evidencia_textual": "garantía a su entera satisfacción o el pago completo de los créditos por parte del"
+        },
+        {
+          "valor_encontrado": "a que se refiere este instrumento o de abstenerse de otorgarlos si",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 19,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 92.54,
+          "evidencia_textual": "de los créditos a que se refiere este instrumento o de abstenerse de otorgarlos si"
+        },
+        {
+          "valor_encontrado": "créditos que sustituyan dichas obligaciones, para lo cual bastará tan solo que cualquiera de los deudores garantizados sea deudor de la obligación sustituida o de la nueva",
+          "documento": "Expedientes/EXP-001/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CRISTIAN RIVERA CAMARGO.docx",
+          "pagina": 1,
+          "metodo": "Documento Word",
+          "confianza": null,
+          "evidencia_textual": "PARAGRAFO PRIMERO. - Desde ahora se pacta que LA PARTE HIPOTECANTE conviene que la hipoteca se mantenga vigente, aunque se concedan prórrogas, reestructuraciones, renovaciones o reducciones del plazo de las obligaciones garantizadas. Las partes convienen desde ahora que la hipoteca respaldará igualmente las obligaciones de los deudores garantizados en caso de novación, de manera que, con esta garantía se respalden igualmente los créditos que sustituyan dichas obligaciones, para lo cual bastará tan solo que cualquiera de los deudores garantizados sea deudor de la obligación sustituida o de la nueva."
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "CRE-002",
+      "nivel": "Atributo",
+      "campo_padre": "Créditos",
+      "entidad": "Crédito",
+      "campo": "Entidad_Otorgante",
+      "descripcion": "Entidad que otorga el crédito.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Entidad_Otorgante",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-011"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "CRE-003",
+      "nivel": "Atributo",
+      "campo_padre": "Créditos",
+      "entidad": "Crédito",
+      "campo": "Linea_Credito",
+      "descripcion": "Tipo de crédito otorgado por la entidad.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Linea_Credito",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-012"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "CRE-004",
+      "nivel": "Atributo",
+      "campo_padre": "Créditos",
+      "entidad": "Crédito",
+      "campo": "Monto_Prestamo",
+      "descripcion": "Valor aprobado del crédito.",
+      "tipo_dato": "Moneda",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-029",
+        "EXT-013"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "$580.000.000\n021",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 1,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 88.1,
+          "evidencia_textual": "$580.000.000\n021"
+        },
+        {
+          "valor_encontrado": "$522.000.000\n030",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 1,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 88.1,
+          "evidencia_textual": "$522.000.000\n030"
+        },
+        {
+          "valor_encontrado": "$580.000.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 6,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.07,
+          "evidencia_textual": "$580.000.000"
+        },
+        {
+          "valor_encontrado": "$58.000.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 6,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.07,
+          "evidencia_textual": "$58.000.000"
+        },
+        {
+          "valor_encontrado": "$522.000.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 6,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 95.07,
+          "evidencia_textual": "$522.000.000"
+        },
+        {
+          "valor_encontrado": "$522.000.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 12,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 94.64,
+          "evidencia_textual": "$522.000.000"
+        },
+        {
+          "valor_encontrado": "$ 347.611.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 20,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 93.85,
+          "evidencia_textual": "$ 347.611.000"
+        },
+        {
+          "valor_encontrado": "$ 1.815.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 20,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 93.85,
+          "evidencia_textual": "$ 1.815.000"
+        },
+        {
+          "valor_encontrado": "$3.456.844",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 23,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 89.44,
+          "evidencia_textual": "$3.456.844"
+        },
+        {
+          "valor_encontrado": "$1.084.605",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 23,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 89.44,
+          "evidencia_textual": "$1.084.605"
+        },
+        {
+          "valor_encontrado": "$84.800",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 23,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 89.44,
+          "evidencia_textual": "$84.800"
+        },
+        {
+          "valor_encontrado": "$5.800.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 23,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 89.44,
+          "evidencia_textual": "$5.800.000"
+        },
+        {
+          "valor_encontrado": "$7",
+          "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+          "pagina": 25,
+          "metodo": "OCR PDF escaneado",
+          "confianza": 79.64,
+          "evidencia_textual": "$7"
+        },
+        {
+          "valor_encontrado": "$ 522.000.000",
+          "documento": "Expedientes/EXP-001/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CRISTIAN RIVERA CAMARGO.docx",
+          "pagina": 1,
+          "metodo": "Documento Word",
+          "confianza": null,
+          "evidencia_textual": "$ 522.000.000"
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "CRE-005",
+      "nivel": "Atributo",
+      "campo_padre": "Créditos",
+      "entidad": "Crédito",
+      "campo": "Forma_Entrega",
+      "descripcion": "Forma de entrega del crédito.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Forma_Entrega",
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-014"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "ESC-001",
+      "nivel": "Entidad",
+      "campo_padre": null,
+      "entidad": "Escritura",
+      "campo": "Escrituras",
+      "descripcion": "Escrituras públicas identificadas dentro del expediente.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": null,
+      "estado": "Extraído",
+      "instrucciones": [
+        "EXT-038"
+      ],
+      "valores": [
+        {
+          "valor_encontrado": "PUBLICAS Y OTROS: 1. Escritura pública No. 706 del 22 -03-2001",
+          "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+          "pagina": 4,
+          "metodo": "PDF digital",
+          "confianza": null,
+          "evidencia_textual": "ESCRITURAS PUBLICAS Y OTROS: 1. Escritura pública No. 706 del 22 -03-2001"
+        }
+      ],
+      "observacion": null
+    },
+    {
+      "id_campo": "ESC-002",
+      "nivel": "Atributo",
+      "campo_padre": "Escrituras",
+      "entidad": "Escritura",
+      "campo": "Tipo_Acto",
+      "descripcion": "Tipo de acto jurídico asociado a la escritura.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Tipo_Acto",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-015"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "ESC-003",
+      "nivel": "Atributo",
+      "campo_padre": "Escrituras",
+      "entidad": "Escritura",
+      "campo": "Numero",
+      "descripcion": "Número de escritura pública.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-016"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "ESC-004",
+      "nivel": "Atributo",
+      "campo_padre": "Escrituras",
+      "entidad": "Escritura",
+      "campo": "Fecha",
+      "descripcion": "Fecha de otorgamiento de la escritura.",
+      "tipo_dato": "Fecha",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-017"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "ESC-005",
+      "nivel": "Atributo",
+      "campo_padre": "Escrituras",
+      "entidad": "Escritura",
+      "campo": "Notaria",
+      "descripcion": "Notaría donde fue otorgada la escritura.",
+      "tipo_dato": "Texto",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-018"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "POD-001",
+      "nivel": "Entidad",
+      "campo_padre": null,
+      "entidad": "Poder",
+      "campo": "Poderes",
+      "descripcion": "Información de poderes o facultades de representación identificados en el expediente.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "No",
+      "mostrar_resultado": null,
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-039"
+      ],
+      "valores": [],
+      "observacion": "No se encontró un valor con la evidencia disponible."
+    },
+    {
+      "id_campo": "POD-002",
+      "nivel": "Atributo",
+      "campo_padre": "Poderes",
+      "entidad": "Poder",
+      "campo": "Tipo_Poder",
+      "descripcion": "Tipo de poder o facultad otorgada.",
+      "tipo_dato": "Enumerado",
+      "catalogo_asociado": "Tipo_Poder",
+      "multiples": "No",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-019"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "POD-003",
+      "nivel": "Atributo",
+      "campo_padre": "Poderes",
+      "entidad": "Poder",
+      "campo": "Otorgante",
+      "descripcion": "Persona o entidad que concede la facultad.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-020"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "POD-004",
+      "nivel": "Atributo",
+      "campo_padre": "Poderes",
+      "entidad": "Poder",
+      "campo": "Apoderado",
+      "descripcion": "Persona autorizada para actuar o firmar.",
+      "tipo_dato": "Lista_Objeto",
+      "catalogo_asociado": null,
+      "multiples": "Sí",
+      "obligatorio": "Sí",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-030",
+        "EXT-021",
+        "EXT-032",
+        "EXT-033",
+        "EXT-034"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    },
+    {
+      "id_campo": "POD-005",
+      "nivel": "Atributo",
+      "campo_padre": "Poderes",
+      "entidad": "Poder",
+      "campo": "Fecha_Poder",
+      "descripcion": "Fecha del documento que acredita la representación.",
+      "tipo_dato": "Fecha",
+      "catalogo_asociado": null,
+      "multiples": "No",
+      "obligatorio": "No",
+      "mostrar_resultado": "Si",
+      "estado": "No existe información",
+      "instrucciones": [
+        "EXT-022",
+        "EXT-031"
+      ],
+      "valores": [],
+      "observacion": "No se identificó un documento correspondiente al origen configurado."
+    }
+  ],
+  "advertencias_configuracion": [
+    "EXT-023: ID_Campo POD-006 no existe en 01_Campos_Extraccion.",
+    "EXT-014: Campo_Destino Créditos[].Forma_Pago no coincide con el campo Forma_Entrega de CRE-005."
+  ]
+}

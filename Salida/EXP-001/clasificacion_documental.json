@@ -1,0 +1,112 @@
+{
+  "id_expediente": "EXP-001",
+  "documentos": [
+    {
+      "documento": "Expedientes/EXP-001/01_Documentos/EP 1548.pdf",
+      "tipo_documental": "Minuta Hipoteca",
+      "codigo_tipo_documental": "Minuta_Hipoteca",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 6,
+          "valor_encontrado": "Préstamo de vivienda A (Enganche convencional)"
+        },
+        {
+          "pagina": 8,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 9,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 11,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 12,
+          "valor_encontrado": "Préstamo de vivienda A (Enganche convencional)"
+        },
+        {
+          "pagina": 13,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 14,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 15,
+          "valor_encontrado": "Préstamo de vivienda A (Enganche convencional)"
+        },
+        {
+          "pagina": 16,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 17,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 18,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 19,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 20,
+          "valor_encontrado": "ECOPETROL S.A."
+        },
+        {
+          "pagina": 25,
+          "valor_encontrado": "ECOPETROL S.A."
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    },
+    {
+      "documento": "Expedientes/EXP-001/01_Documentos/ESTUDIO DE TITULOS DG-ECP-00423 - CRISTIAN RIVERA CAMARGO.pdf",
+      "tipo_documental": "Certificado de Tradición",
+      "codigo_tipo_documental": "DOC_CTL",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "Casa"
+        },
+        {
+          "pagina": 2,
+          "valor_encontrado": "Apartamento"
+        },
+        {
+          "pagina": 3,
+          "valor_encontrado": "Certificado de Tradición"
+        },
+        {
+          "pagina": 4,
+          "valor_encontrado": "Certificado de Tradición"
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    },
+    {
+      "documento": "Expedientes/EXP-001/01_Documentos/FGR-019 MINUTA DE HIPOTECA ABIERTA SIN LIMITE DE CUANTIA ECOPETROL CRISTIAN RIVERA CAMARGO.docx",
+      "tipo_documental": "Minuta Hipoteca",
+      "codigo_tipo_documental": "Minuta_Hipoteca",
+      "estado": "Identificado",
+      "evidencias": [
+        {
+          "pagina": 1,
+          "valor_encontrado": "FONDO DE EMPLEADOS DE LOS TRABAJADORES Y PENSIONADOS DEL GRUPO ECOPETROL - CAVIPETROL"
+        }
+      ],
+      "observacion": "Tipo documental identificado mediante evidencia OCR y definiciones de Arquitectura.xlsx."
+    }
+  ]
+}

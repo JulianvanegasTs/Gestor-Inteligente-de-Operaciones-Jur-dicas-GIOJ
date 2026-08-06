@@ -7,6 +7,17 @@
     "idioma": "es-CO"
   },
 
+  "institucional": {
+    "ciudad_certificado": "Bogotá D.C.",
+    "representante_legal": "ANGIE TATIANA DAZA GARZÓN",
+    "cargo_representante": "Representante Legal",
+    "empresa": "DAZA Y GÓMEZ ABOGADOS ASOCIADOS S.A.S.",
+    "direccion_empresa": "Carrera 9 No. 12B-12 Oficina 702",
+    "telefono_empresa": "(+601) 2438472 / 6227607",
+    "celular_empresa": "(+57) 3115194271",
+    "correo_empresa": "dygasistenciajuridica@gmail.com"
+  },
+
   "rutas": {
     "arquitectura": "./Arquitectura/Arquitectura.xlsx",
     "plantillas": "./Plantillas/",
