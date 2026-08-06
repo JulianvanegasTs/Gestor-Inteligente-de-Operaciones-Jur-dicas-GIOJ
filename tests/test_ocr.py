@@ -12,6 +12,7 @@ from unittest.mock import patch
 from urllib.request import Request, urlopen
 
 from Codigo.config import load_configuration
+from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.expediente import DocumentoExpediente
 from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, _run_tesseract, extract_expediente_text
 from Codigo.web import create_server
@@ -48,7 +49,15 @@ class OCRTests(unittest.TestCase):
             extracted = TextoExtraido(
                 "Expedientes/EXP-WEB/01_Documentos/imagen.png", 1, "texto visible", "OCR imagen", 95.0
             )
-            with patch("Codigo.ocr._extract_document", return_value=[extracted]):
+            classification = ResultadoClasificacion(
+                "EXP-WEB",
+                (DocumentoClasificado(extracted.documento, None, None, "No identificado", (), "Sin evidencia."),),
+                "Salida/EXP-WEB/clasificacion_documental.json",
+            )
+            with (
+                patch("Codigo.ocr._extract_document", return_value=[extracted]),
+                patch("Codigo.web.classify_expediente_documents", return_value=classification),
+            ):
                 with urlopen(request) as response:
                     payload = json.loads(response.read().decode("utf-8"))
             with urlopen(
@@ -59,9 +68,10 @@ class OCRTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-        self.assertEqual(payload["mensaje"], "Texto documental extraído.")
+        self.assertEqual(payload["mensaje"], "Expediente clasificado.")
         self.assertEqual(payload["ocr"]["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
-        self.assertIn("Resultado: Salida/EXP-WEB/texto_extraido.json", payload["detalle"])
+        self.assertIn("Clasificación: Salida/EXP-WEB/clasificacion_documental.json", payload["detalle"])
+        self.assertEqual(payload["clasificacion"]["archivo_salida"], "Salida/EXP-WEB/clasificacion_documental.json")
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
         self.assertEqual(output["textos"][0]["pagina"], 1)
@@ -70,6 +80,7 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(output["textos"][0]["confianza"], 95.0)
         self.assertEqual(progress["estado"], "completado")
         self.assertEqual(progress["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
+        self.assertEqual(progress["archivo_clasificacion"], "Salida/EXP-WEB/clasificacion_documental.json")
         self.assertEqual(progress["completadas"], 1)
         self.assertEqual(progress["total"], 1)
 

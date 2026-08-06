@@ -150,3 +150,32 @@ archivo en `Logs/expediente.log`.
 
 Esta etapa no abre, no copia ni procesa el contenido de los documentos. La
 lectura está limitada a la carpeta configurada `Expedientes/`.
+
+---
+
+# Clasificación documental (GIOJ-005)
+
+Al terminar el OCR, el análisis clasifica cada documento con las definiciones
+activas de `Arquitectura/Arquitectura.xlsx`. Consume el catálogo de tipos
+documentales, la matriz de origen y las instrucciones de extracción; por ello,
+no contiene una lista de tipos ni patrones jurídicos en el código.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/clasificacion_documental.json
+```
+
+Cada registro conserva el documento original, el tipo y código definidos por
+la arquitectura, la evidencia OCR por página o el estado `No identificado`
+cuando no hay una coincidencia segura. También se registra el proceso en
+`Logs/clasificacion.log`.
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_clasificacion -v
+```
+
+O inicie la interfaz, seleccione un expediente de prueba y pulse **Analizar**:
+la respuesta incluye la ubicación y el detalle de la clasificación.

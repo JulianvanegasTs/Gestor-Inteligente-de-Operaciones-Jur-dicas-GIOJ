@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .bootstrap import StartupReport, initialize_project
+from .clasificacion import ClassificationError, classify_expediente_documents
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
 from .ocr import OCRExtractionError, extract_expediente_text
 
@@ -249,24 +250,51 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     return
                 update_analysis_state(
                     expediente_id,
+                    estado="procesando",
+                    etapa="Clasificando documentos",
+                    documento=None,
+                    pagina=None,
+                )
+                try:
+                    classification = classify_expediente_documents(project_root, expediente_id)
+                except ClassificationError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                update_analysis_state(
+                    expediente_id,
                     estado="completado",
-                    etapa="Extracción de texto completada",
+                    etapa="Extracción y clasificación documental completadas",
                     documento=None,
                     pagina=None,
                     archivo_salida=result.archivo_salida,
+                    archivo_clasificacion=classification.archivo_salida,
                     errores=len(result.errores),
                 )
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": "Texto documental extraído.",
+                    "mensaje": "Expediente clasificado.",
                     "detalle": (
                         f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
-                        f"Resultado: {result.archivo_salida}"
+                        f"Clasificación: {classification.archivo_salida}"
                     ),
                     "ocr": {
                         "archivo_salida": result.archivo_salida,
                         "errores": [
                             {"documento": item.documento, "pagina": item.pagina, "detalle": item.detalle}
                             for item in result.errores
+                        ],
+                    },
+                    "clasificacion": {
+                        "archivo_salida": classification.archivo_salida,
+                        "documentos": [
+                            {
+                                "documento": item.documento,
+                                "tipo_documental": item.tipo_documental,
+                                "codigo_tipo_documental": item.codigo_tipo_documental,
+                                "estado": item.estado,
+                                "observacion": item.observacion,
+                            }
+                            for item in classification.documentos
                         ],
                     },
                 })
