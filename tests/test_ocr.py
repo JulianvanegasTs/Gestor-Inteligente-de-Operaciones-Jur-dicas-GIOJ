@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from Codigo.config import load_configuration
 from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
+from Codigo.extraccion import ResultadoExtraccion
 from Codigo.expediente import DocumentoExpediente
 from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, _run_tesseract, extract_expediente_text
 from Codigo.web import create_server
@@ -57,6 +58,7 @@ class OCRTests(unittest.TestCase):
             with (
                 patch("Codigo.ocr._extract_document", return_value=[extracted]),
                 patch("Codigo.web.classify_expediente_documents", return_value=classification),
+                patch("Codigo.web.extract_expediente_data", return_value=ResultadoExtraccion("EXP-WEB", (), (), "Salida/EXP-WEB/extraccion_documental.json")),
             ):
                 with urlopen(request) as response:
                     payload = json.loads(response.read().decode("utf-8"))
@@ -68,10 +70,11 @@ class OCRTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-        self.assertEqual(payload["mensaje"], "Expediente clasificado.")
+        self.assertEqual(payload["mensaje"], "Expediente extraído y clasificado.")
         self.assertEqual(payload["ocr"]["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
         self.assertIn("Clasificación: Salida/EXP-WEB/clasificacion_documental.json", payload["detalle"])
         self.assertEqual(payload["clasificacion"]["archivo_salida"], "Salida/EXP-WEB/clasificacion_documental.json")
+        self.assertEqual(payload["extraccion"]["archivo_salida"], "Salida/EXP-WEB/extraccion_documental.json")
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
         self.assertEqual(output["textos"][0]["pagina"], 1)
@@ -81,6 +84,7 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(progress["estado"], "completado")
         self.assertEqual(progress["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
         self.assertEqual(progress["archivo_clasificacion"], "Salida/EXP-WEB/clasificacion_documental.json")
+        self.assertEqual(progress["archivo_extraccion"], "Salida/EXP-WEB/extraccion_documental.json")
         self.assertEqual(progress["completadas"], 1)
         self.assertEqual(progress["total"], 1)
 

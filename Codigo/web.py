@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
+from .extraccion import ExtractionError, extract_expediente_data
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
 from .ocr import OCRExtractionError, extract_expediente_text
 
@@ -263,19 +264,34 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     return
                 update_analysis_state(
                     expediente_id,
+                    estado="procesando",
+                    etapa="Extrayendo campos jurídicos",
+                    documento=None,
+                    pagina=None,
+                )
+                try:
+                    extraction = extract_expediente_data(project_root, expediente_id)
+                except ExtractionError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                update_analysis_state(
+                    expediente_id,
                     estado="completado",
                     etapa="Extracción y clasificación documental completadas",
                     documento=None,
                     pagina=None,
                     archivo_salida=result.archivo_salida,
                     archivo_clasificacion=classification.archivo_salida,
+                    archivo_extraccion=extraction.archivo_salida,
                     errores=len(result.errores),
                 )
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": "Expediente clasificado.",
+                    "mensaje": "Expediente extraído y clasificado.",
                     "detalle": (
                         f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
-                        f"Clasificación: {classification.archivo_salida}"
+                        f"Clasificación: {classification.archivo_salida}. "
+                        f"Extracción: {extraction.archivo_salida}"
                     ),
                     "ocr": {
                         "archivo_salida": result.archivo_salida,
@@ -296,6 +312,11 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                             }
                             for item in classification.documentos
                         ],
+                    },
+                    "extraccion": {
+                        "archivo_salida": extraction.archivo_salida,
+                        "campos": len(extraction.campos),
+                        "advertencias_configuracion": list(extraction.advertencias_configuracion),
                     },
                 })
                 return

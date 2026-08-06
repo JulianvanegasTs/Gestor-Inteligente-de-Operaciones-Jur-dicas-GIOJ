@@ -54,6 +54,10 @@
     "archivo_salida": "texto_extraido.json"
   },
 
+  "extraccion": {
+    "archivo_salida": "extraccion_documental.json"
+  },
+
   "analisis": {
     "comparacion_textual": true,
     "normalizar_texto": true,
