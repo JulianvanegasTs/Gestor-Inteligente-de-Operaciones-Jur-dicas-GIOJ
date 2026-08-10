@@ -153,6 +153,27 @@ lectura está limitada a la carpeta configurada `Expedientes/`.
 
 ---
 
+# OCR documental (GIOJ-004)
+
+Al iniciar el análisis, GIOJ extrae texto de los PDF digitales, PDF
+escaneados e imágenes del expediente. Conserva la relación entre documento,
+página, texto, método de lectura y confianza OCR cuando aplica; los errores
+de un documento se registran sin detener el procesamiento de los demás.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/texto_extraido.json
+```
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_ocr -v
+```
+
+---
+
 # Clasificación documental (GIOJ-005)
 
 Al terminar el OCR, el análisis clasifica cada documento con las definiciones
@@ -179,3 +200,67 @@ python -m unittest tests.test_clasificacion -v
 
 O inicie la interfaz, seleccione un expediente de prueba y pulse **Analizar**:
 la respuesta incluye la ubicación y el detalle de la clasificación.
+
+---
+
+# Extracción documental (GIOJ-006)
+
+GIOJ extrae exclusivamente los campos e instrucciones definidos en
+`01_Campos_Extraccion` y `05_Extraccion_Documental` de la arquitectura. Cada
+valor conserva su documento, página, evidencia textual, método y confianza;
+no se crean campos ni reglas de extracción en el código.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/extraccion_documental.json
+```
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_extraccion -v
+```
+
+---
+
+# Normalización de datos (GIOJ-007)
+
+La normalización aplica los formateadores vigentes de `10_Formateadores` sin
+modificar los datos originales. Produce valores de comparación para fechas,
+monedas, nombres, notarías y otros formatos definidos, manteniendo las
+evidencias de la extracción.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/normalizacion_documental.json
+```
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_normalizacion -v
+```
+
+---
+
+# Validaciones documentales (GIOJ-008)
+
+El motor lee todas las filas activas de `04_Reglas_Negocio` y compara los
+criterios cuyos campos fueron extraídos del expediente. Cada resultado incluye
+la regla aplicada, el valor esperado, el valor encontrado, el documento y la
+página de evidencia. Los estados posibles son `Cumple`, `No cumple`, `No
+existe información` y `No aplica`.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/validaciones_documentales.json
+```
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_validacion -v
+```
