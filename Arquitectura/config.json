@@ -73,6 +73,10 @@
     "archivo_salida": "normalizacion_documental.json"
   },
 
+  "validacion": {
+    "archivo_salida": "validaciones_documentales.json"
+  },
+
   "analisis": {
     "comparacion_textual": true,
     "normalizar_texto": true,

@@ -17,6 +17,7 @@ from .extraccion import ExtractionError, extract_expediente_data
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text
+from .validacion import ValidationError, validate_expediente_data
 
 
 CLIENT_CONNECTOR = """
@@ -292,23 +293,38 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     return
                 update_analysis_state(
                     expediente_id,
+                    estado="procesando",
+                    etapa="Aplicando validaciones documentales",
+                    documento=None,
+                    pagina=None,
+                )
+                try:
+                    validation = validate_expediente_data(project_root, expediente_id)
+                except ValidationError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                update_analysis_state(
+                    expediente_id,
                     estado="completado",
-                    etapa="Extracción, clasificación y normalización completadas",
+                    etapa="Extracción, clasificación, normalización y validaciones completadas",
                     documento=None,
                     pagina=None,
                     archivo_salida=result.archivo_salida,
                     archivo_clasificacion=classification.archivo_salida,
                     archivo_extraccion=extraction.archivo_salida,
                     archivo_normalizacion=normalization.archivo_salida,
+                    archivo_validaciones=validation.archivo_salida,
                     errores=len(result.errores),
                 )
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": "Expediente extraído, clasificado y normalizado.",
+                    "mensaje": "Expediente extraído, clasificado, normalizado y validado.",
                     "detalle": (
                         f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
                         f"Clasificación: {classification.archivo_salida}. "
                         f"Extracción: {extraction.archivo_salida}. "
-                        f"Normalización: {normalization.archivo_salida}"
+                        f"Normalización: {normalization.archivo_salida}. "
+                        f"Validaciones: {validation.archivo_salida}"
                     ),
                     "ocr": {
                         "archivo_salida": result.archivo_salida,
@@ -341,6 +357,10 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         "normalizaciones": len(normalization.normalizaciones),
                         "resumen": asdict(normalization.resumen),
                         "advertencias_configuracion": list(normalization.advertencias_configuracion),
+                    },
+                    "validacion": {
+                        "archivo_salida": validation.archivo_salida,
+                        "resumen": asdict(validation.resumen),
                     },
                 })
                 return
