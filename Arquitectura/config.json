@@ -69,6 +69,10 @@
     "archivo_salida": "extraccion_documental.json"
   },
 
+  "normalizacion": {
+    "archivo_salida": "normalizacion_documental.json"
+  },
+
   "analisis": {
     "comparacion_textual": true,
     "normalizar_texto": true,
