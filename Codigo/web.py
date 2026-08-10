@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -316,6 +317,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     "extraccion": {
                         "archivo_salida": extraction.archivo_salida,
                         "campos": len(extraction.campos),
+                        "resumen": asdict(extraction.resumen) if extraction.resumen else None,
                         "advertencias_configuracion": list(extraction.advertencias_configuracion),
                     },
                 })
