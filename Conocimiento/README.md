@@ -30,9 +30,14 @@ Catálogos auxiliares.
 
 Casos/
 
-Se incorporará en versiones futuras.
+Contiene casos históricos validados como referencia para la generación de
+conceptos. Los documentos que aún no se han estructurado se conservan en
+`Casos/Pendientes_Estructuracion/`; los casos revisados se almacenan en
+`Casos/Validados/` con su JSON trazable.
 
-Contendrá casos históricos utilizados como referencia para la generación de conceptos.
+La organización no agrega reglas jurídicas ni modifica las validaciones
+vigentes. Cada observación histórica requiere revisión humana antes de que
+pueda proponerse como cambio a la arquitectura oficial.
 
 ---
 
