@@ -24,6 +24,14 @@ class DocumentoExpediente:
 
 
 @dataclass(frozen=True)
+class ArchivoSeleccionado:
+    """Archivo recibido desde la interfaz y mantenido solo en memoria."""
+
+    documento: DocumentoExpediente
+    contenido: bytes
+
+
+@dataclass(frozen=True)
 class Expediente:
     """Inventario de documentos encontrados en un expediente."""
 
@@ -35,6 +43,7 @@ class Expediente:
 _PDF_EXTENSIONS = {".pdf"}
 _WORD_EXTENSIONS = {".doc", ".docx"}
 _IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+_MEMORY_EXTENSIONS = _PDF_EXTENSIONS | {".docx"} | _IMAGE_EXTENSIONS
 
 
 def _categorize(path: Path) -> str:
@@ -47,6 +56,20 @@ def _categorize(path: Path) -> str:
     if extension in _IMAGE_EXTENSIONS:
         return "Imagen"
     return "Otro documento"
+
+
+def create_selected_file(filename: str, content: bytes) -> ArchivoSeleccionado:
+    """Valida un archivo del navegador sin crear una copia en el sistema de archivos."""
+    if not isinstance(filename, str) or not filename.strip() or not isinstance(content, bytes):
+        raise ExpedienteError("El archivo seleccionado no es válido")
+    name = Path(filename.strip()).name
+    if name in {"", ".", ".."}:
+        raise ExpedienteError("El nombre del archivo seleccionado no es válido")
+    path = Path(name)
+    document = DocumentoExpediente(name, name, _categorize(path))
+    if path.suffix.casefold() not in _MEMORY_EXTENSIONS:
+        raise ExpedienteError(f"El formato de {name} no es compatible con el análisis")
+    return ArchivoSeleccionado(document, content)
 
 
 def _relative_to_project(path: Path, project_root: Path) -> str:

@@ -104,6 +104,8 @@
 
   "documentos": {
     "preservar_originales": true,
+    "procesar_seleccion_en_memoria": true,
+    "crear_copias_fuente": false,
     "reemplazar_solo_marcadores": true,
     "permitir_varios_inmuebles": true,
     "permitir_varias_personas": true,
@@ -136,8 +138,11 @@
   },
 
   "mvp": {
-    "origen_expedientes": "Expedientes",
-    "seleccion_manual_expediente": true,
+    "origen_documentos": "selector_archivos_interfaz",
+    "procesamiento_archivos": "memoria",
+    "copiar_archivos_seleccionados": false,
+    "seleccion_manual_expediente": false,
+    "tamano_maximo_seleccion_mb": 100,
     "consultar_casos_externos_en_analisis": false
   },
 
@@ -156,7 +161,8 @@
 
   "seguridad": {
     "modificar_documentos_originales": false,
-    "trabajar_sobre_copias": true,
+    "trabajar_sobre_copias": false,
+    "retener_archivos_seleccionados_solo_en_memoria": true,
     "registrar_errores": true,
     "proteger_trazabilidad": true
   }

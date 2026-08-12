@@ -99,7 +99,7 @@ class BootstrapTests(unittest.TestCase):
         source = (root / "Programa")
         source.mkdir()
         interface = source / "index.html"
-        original = "<html><body><button id='btn-refresh'></button></body></html>"
+        original = "<html><body><button id='btn-select'></button></body></html>"
         interface.write_text(original, encoding="utf-8")
         server = create_server(root)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

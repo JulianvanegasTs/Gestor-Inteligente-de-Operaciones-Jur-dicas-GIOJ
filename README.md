@@ -28,10 +28,10 @@ Contiene cada expediente que será analizado.
 Conocimiento/
 Contiene la base documental utilizada por la IA.
 
-Durante el MVP, los expedientes operativos son creados manualmente por el
-analista únicamente bajo `Expedientes/<ID_EXPEDIENTE>/01_Documentos`. La
-interfaz lista esas carpetas y el motor solo puede analizar un expediente
-seleccionado desde esa ubicación.
+Durante el MVP, la persona analista selecciona en la interfaz los archivos que
+desea analizar desde cualquier carpeta del computador. El backend conserva el
+contenido únicamente en memoria durante la sesión: no copia, mueve ni modifica
+los documentos originales.
 
 Los casos conservados fuera del proyecto son antecedentes de consulta humana.
 No se configuran como entrada del motor, no se consultan durante el análisis y
@@ -131,9 +131,9 @@ python -m Codigo interfaz --puerto 8000
 
 Abra `http://127.0.0.1:8000/` en el navegador. La interfaz se sirve desde
 `Programa/index.html` sin modificar ese archivo. Los botones se conectan con
-el backend: Nuevo Proyecto valida el entorno, la selección registra únicamente
-los nombres de archivos y los pasos de análisis/generación muestran que serán
-habilitados en sus tareas posteriores.
+el backend: **Seleccionar archivos** recibe temporalmente los documentos en
+memoria y **Iniciar análisis** ejecuta clasificación, OCR, extracción,
+normalización, validación y concepto jurídico.
 
 ## Requisito permanente de progreso
 
@@ -146,48 +146,37 @@ Este componente forma parte de la interfaz aprobada. Los ciclos futuros no
 deben retirarlo, ocultarlo detrás del panel de resultados ni sustituirlo sin
 autorización funcional. La prueba `tests.test_ocr` protege este requisito.
 
-La selección se hace exclusivamente con **Expediente para analizar**. Este
-selector carga una carpeta creada manualmente bajo `Expedientes/`; la interfaz
-no carga archivos sueltos ni consulta carpetas externas durante el análisis.
+La selección se hace con **Seleccionar archivos** y puede partir de cualquier
+carpeta accesible para el navegador. El navegador transmite el contenido al
+backend local sin revelar ni conservar las rutas absolutas. La selección
+permanece en memoria y solo los resultados derivados se escriben en `Salida/`.
 
 ---
 
-# Lectura del expediente (GIOJ-003)
+# Selección de archivos (GIOJ-003)
 
-La carpeta del expediente debe existir dentro de `Expedientes/` y conservar
-esta estructura:
+El botón **Seleccionar archivos** admite PDF, DOCX e imágenes compatibles
+desde cualquier ubicación accesible para el navegador. Se rechazan archivos
+vacíos, formatos no compatibles y nombres duplicados dentro de una misma
+selección. El límite total del MVP es 100 MB.
 
-```text
-Expedientes/
-└── EXP-001/
-    └── 01_Documentos/
-        ├── escritura.pdf
-        └── anexos/
-            └── soporte.jpg
-```
-
-Al seleccionar la carpeta `EXP-001` desde la interfaz, GIOJ construye el
-objeto interno `Expediente` e inventaría de forma recursiva todos los archivos
-de `01_Documentos`. Conserva el nombre y la ubicación relativa original,
-identifica PDF, documentos Word e imágenes por su extensión, y registra cada
-archivo en `Logs/expediente.log`.
-
-Esta etapa no abre, no copia ni procesa el contenido de los documentos. La
-lectura está limitada a la carpeta configurada `Expedientes/`.
+Los bytes seleccionados permanecen únicamente en la memoria del servidor
+local. Los archivos fuente no se escriben en `Expedientes/` ni en otra carpeta.
+Una nueva selección reemplaza la selección temporal anterior.
 
 ---
 
 # OCR documental (GIOJ-004)
 
 Al iniciar el análisis, GIOJ extrae texto de los PDF digitales, PDF
-escaneados e imágenes del expediente. Conserva la relación entre documento,
+escaneados, DOCX e imágenes seleccionados. Conserva la relación entre documento,
 página, texto, método de lectura y confianza OCR cuando aplica; los errores
 de un documento se registran sin detener el procesamiento de los demás.
 
 El resultado se guarda en:
 
 ```text
-Salida/{id_expediente}/texto_extraido.json
+Salida/{id_seleccion}/texto_extraido.json
 ```
 
 Para probarlo, ejecute:
@@ -222,7 +211,7 @@ Para probarlo, ejecute:
 python -m unittest tests.test_clasificacion -v
 ```
 
-O inicie la interfaz, seleccione un expediente de prueba y pulse **Analizar**:
+O inicie la interfaz, seleccione los archivos y pulse **Iniciar análisis**:
 la respuesta incluye la ubicación y el detalle de la clasificación.
 
 ---
@@ -314,7 +303,7 @@ para revisión profesional.
 El resultado se guarda en:
 
 ```text
-Salida/{id_expediente}/resultado_juridico.json
+Salida/{id_seleccion}/resultado_juridico.json
 ```
 
 Para probarlo, ejecute:
@@ -336,7 +325,8 @@ python -m unittest tests.test_motor_juridico -v
 - La ausencia de evidencia suficiente produce `No Conformidad` con estado `No
   existe información`; el sistema no presume conformidad.
 - La salida debe registrar el resultado, las reglas evaluadas, el consolidado
-  por tipo, las observaciones numeradas y el archivo de validaciones utilizado.
+  por tipo y las inconsistencias numeradas con archivo, página, valor esperado
+  y valor encontrado.
 - El resultado es una propuesta trazable para revisión del analista, no una
   sustitución de su criterio profesional.
 
@@ -345,8 +335,8 @@ python -m unittest tests.test_motor_juridico -v
 La hoja `06_Casos_Prueba` documenta antecedentes de consulta: campos vacíos,
 instrucciones internas, bloques duplicados, equivalencias de cuantía, orden de
 secciones y cadenas de poderes. No es una fuente de ejecución. Las pruebas de
-desarrollo deben usar expedientes creados bajo `Expedientes/Pruebas/`; los
-resultados se guardan en `Salida/{id_expediente}`.
+desarrollo usan archivos sintéticos controlados; los resultados de la interfaz
+se guardan en `Salida/{id_seleccion}`.
 
 Las pruebas deterministas de validación y consolidación se ejecutan con:
 

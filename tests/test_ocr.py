@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import io
 import subprocess
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 from urllib.request import Request, urlopen
@@ -14,10 +16,18 @@ from urllib.request import Request, urlopen
 from Codigo.config import load_configuration
 from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.extraccion import ResultadoExtraccion
-from Codigo.expediente import DocumentoExpediente
+from Codigo.expediente import DocumentoExpediente, create_selected_file
 from Codigo.motor_juridico import ResultadoMotorJuridico, ResumenMotorJuridico
 from Codigo.normalizacion import ResultadoNormalizacion, ResumenNormalizacion
-from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, _run_tesseract, extract_expediente_text
+from Codigo.ocr import (
+    OCRExtractionError,
+    ResultadoOCR,
+    TextoExtraido,
+    _extract_pdf,
+    _run_tesseract,
+    extract_expediente_text,
+    extract_selected_files_text,
+)
 from Codigo.validacion import ResultadoValidaciones, ResumenValidacion
 from Codigo.web import create_server
 
@@ -34,6 +44,83 @@ def create_project() -> Path:
 
 
 class OCRTests(unittest.TestCase):
+    def test_selected_docx_is_processed_from_memory_without_creating_a_source_copy(self) -> None:
+        root = create_project()
+        content = io.BytesIO()
+        with zipfile.ZipFile(content, "w") as archive:
+            archive.writestr(
+                "word/document.xml",
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                "<w:body><w:p><w:r><w:t>Escritura para firma</w:t></w:r></w:p></w:body></w:document>",
+            )
+        selected = create_selected_file("escritura.docx", content.getvalue())
+
+        result = extract_selected_files_text(root, "SEL-MEMORIA", (selected,))
+
+        self.assertEqual(result.textos[0].documento, "escritura.docx")
+        self.assertEqual(result.textos[0].texto, "Escritura para firma")
+        self.assertFalse((root / "Expedientes").exists())
+        self.assertTrue((root / result.archivo_salida).is_file())
+
+    def test_file_selection_endpoint_accepts_multipart_and_does_not_create_copies(self) -> None:
+        root = create_project()
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        boundary = "gioj-test-boundary"
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="archivos"; filename="escritura.docx"\r\n'
+            "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n"
+        ).encode("utf-8") + b"contenido-seleccionado" + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        try:
+            address, port = server.server_address[:2]
+            request = Request(
+                f"http://{address}:{port}/api/archivos/seleccion",
+                data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                method="POST",
+            )
+            with urlopen(request) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            selection_id = payload["seleccion"]["id"]
+            extracted = TextoExtraido("escritura.docx", 1, "texto", "Documento Word")
+            classification = ResultadoClasificacion(
+                selection_id,
+                (DocumentoClasificado("escritura.docx", "Escritura_Firma", "ESC-FIR", "Clasificado", (), ""),),
+                f"Salida/{selection_id}/clasificacion_documental.json",
+            )
+            with (
+                patch(
+                    "Codigo.web.extract_selected_files_text",
+                    return_value=ResultadoOCR(selection_id, (extracted,), (), f"Salida/{selection_id}/texto_extraido.json"),
+                ) as memory_ocr,
+                patch("Codigo.web.classify_expediente_documents", return_value=classification) as classify,
+                patch("Codigo.web.extract_expediente_data", return_value=ResultadoExtraccion(selection_id, (), (), f"Salida/{selection_id}/extraccion_documental.json")),
+                patch("Codigo.web.normalize_expediente_data", return_value=ResultadoNormalizacion(selection_id, (), (), f"Salida/{selection_id}/normalizacion_documental.json", ResumenNormalizacion(0, 0, 0, ()))),
+                patch("Codigo.web.validate_expediente_data", return_value=ResultadoValidaciones(selection_id, (), f"Salida/{selection_id}/validaciones_documentales.json", ResumenValidacion(0, 0, 0, 0, 0, 0))),
+                patch("Codigo.web.apply_legal_engine", return_value=ResultadoMotorJuridico(selection_id, "Conformidad", (), (), (), f"Salida/{selection_id}/resultado_juridico.json", ResumenMotorJuridico(0, 0, 0, 0, 0, 0, 0))),
+            ):
+                analysis_request = Request(
+                    f"http://{address}:{port}/api/analisis/iniciar",
+                    data=json.dumps({"id_expediente": selection_id}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(analysis_request) as response:
+                    analysis = json.loads(response.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertTrue(payload["seleccion"]["id"].startswith("SEL-"))
+        self.assertEqual(payload["seleccion"]["documentos"][0]["nombre"], "escritura.docx")
+        self.assertIn("solo en memoria", payload["detalle"])
+        self.assertEqual(analysis["mensaje"], "Resultado jurídico: Conformidad.")
+        self.assertEqual(memory_ocr.call_args.args[2][0].contenido, b"contenido-seleccionado")
+        self.assertEqual(classify.call_args.args[2][0].ubicacion_original, "escritura.docx")
+        self.assertFalse((root / "Expedientes").exists())
+
     def test_analysis_endpoint_runs_ocr_and_reports_the_output_file(self) -> None:
         root = create_project()
         documents = root / "Expedientes" / "EXP-WEB" / "01_Documentos"
@@ -108,9 +195,9 @@ class OCRTests(unittest.TestCase):
         self.assertIn('id="analysis-progress"', interface)
         self.assertIn('role="progressbar"', interface)
         self.assertIn('id="progress-percent"', interface)
-        self.assertIn('id="expediente-select"', interface)
-        self.assertIn('id="btn-refresh"', interface)
-        self.assertNotIn('id="file-input"', interface)
+        self.assertNotIn('id="expediente-select"', interface)
+        self.assertIn('id="btn-select"', interface)
+        self.assertIn('id="file-input"', interface)
         self.assertIn('aria-valuenow="0"', interface)
         self.assertLess(interface.index('id="btn-analyze"'), interface.index('id="analysis-progress"'))
         self.assertLess(
@@ -118,7 +205,7 @@ class OCRTests(unittest.TestCase):
             interface.index('<section class="card results-section">'),
         )
         self.assertNotIn('id="progress-remaining"', interface)
-        self.assertIn('Seleccione un valor en “Expediente para analizar”', interface)
+        self.assertIn('Use “Seleccionar archivos”', interface)
         self.assertIn('id="validation-details"', interface)
         self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)

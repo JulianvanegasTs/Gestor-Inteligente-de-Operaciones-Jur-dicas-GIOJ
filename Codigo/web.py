@@ -5,19 +5,23 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
+from .config import ConfigurationError, load_configuration
 from .extraccion import ExtractionError, extract_expediente_data
-from .expediente import ExpedienteError, list_expedientes, read_expediente
+from .expediente import ArchivoSeleccionado, ExpedienteError, create_selected_file, list_expedientes, read_expediente
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
-from .ocr import OCRExtractionError, extract_expediente_text
+from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_files_text
 from .validacion import ValidationError, validate_expediente_data
 
 
@@ -128,6 +132,14 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     interface_path = project_root / "Programa" / "index.html"
     analysis_states: dict[str, dict[str, Any]] = {}
     analysis_states_lock = threading.Lock()
+    selected_files: dict[str, tuple[ArchivoSeleccionado, ...]] = {}
+    selected_files_lock = threading.Lock()
+    try:
+        mvp_settings = load_configuration(project_root).values.get("mvp", {})
+        max_selection_mb = int(mvp_settings.get("tamano_maximo_seleccion_mb", 100)) if isinstance(mvp_settings, dict) else 100
+    except (ConfigurationError, TypeError, ValueError):
+        max_selection_mb = 100
+    max_selection_bytes = max(1, max_selection_mb) * 1024 * 1024
 
     def update_analysis_state(expediente_id: str, **values: Any) -> None:
         with analysis_states_lock:
@@ -151,6 +163,34 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             if not isinstance(value, dict):
                 raise ValueError("El cuerpo debe ser un objeto JSON")
             return value
+
+        def _read_selected_files(self) -> tuple[ArchivoSeleccionado, ...]:
+            content_type = self.headers.get("Content-Type", "")
+            if not content_type.casefold().startswith("multipart/form-data"):
+                raise ValueError("La selección debe enviarse como formulario de archivos")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > max_selection_bytes:
+                raise ValueError(f"La selección debe contener archivos y no superar {max_selection_mb} MB")
+            body = self.rfile.read(length)
+            message = BytesParser(policy=email_policy).parsebytes(
+                f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+            )
+            files: list[ArchivoSeleccionado] = []
+            names: set[str] = set()
+            for part in message.iter_parts():
+                if part.get_content_disposition() != "form-data" or part.get_filename() is None:
+                    continue
+                selected = create_selected_file(part.get_filename() or "", part.get_payload(decode=True) or b"")
+                folded_name = selected.documento.nombre.casefold()
+                if folded_name in names:
+                    raise ValueError(f"No seleccione dos archivos con el mismo nombre: {selected.documento.nombre}")
+                if not selected.contenido:
+                    raise ValueError(f"El archivo {selected.documento.nombre} está vacío")
+                names.add(folded_name)
+                files.append(selected)
+            if not files:
+                raise ValueError("Seleccione al menos un archivo compatible")
+            return tuple(files)
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
@@ -190,6 +230,34 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/archivos/seleccion":
+                try:
+                    files = self._read_selected_files()
+                except (ExpedienteError, TypeError, ValueError) as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                selection_id = f"SEL-{uuid4().hex[:12].upper()}"
+                with selected_files_lock:
+                    selected_files.clear()
+                    selected_files[selection_id] = files
+                self._send_json(HTTPStatus.OK, {
+                    "mensaje": "Archivos seleccionados.",
+                    "detalle": (
+                        f"{len(files)} archivo(s) disponibles solo en memoria. "
+                        "Los originales no fueron copiados ni modificados."
+                    ),
+                    "seleccion": {
+                        "id": selection_id,
+                        "documentos": [
+                            {
+                                "nombre": item.documento.nombre,
+                                "categoria": item.documento.categoria,
+                            }
+                            for item in files
+                        ],
+                    },
+                })
+                return
             try:
                 payload = self._read_json()
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
@@ -201,7 +269,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 self._send_json(status, {
                     **_report_payload(report),
                     "mensaje": "Proyecto inicializado." if report.is_ready else "El proyecto no está listo.",
-                    "detalle": "Actualice la lista y seleccione un expediente creado manualmente en Expedientes.",
+                    "detalle": "Use Seleccionar archivos para preparar los documentos del análisis.",
                 })
                 return
             if self.path == "/api/expediente/seleccion":
@@ -233,8 +301,10 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             if self.path == "/api/analisis/iniciar":
                 expediente_id = payload.get("id_expediente")
                 if not isinstance(expediente_id, str) or not expediente_id.strip():
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Seleccione un expediente antes de analizar."})
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Seleccione los archivos antes de analizar."})
                     return
+                with selected_files_lock:
+                    memory_files = selected_files.get(expediente_id)
                 update_analysis_state(
                     expediente_id,
                     estado="procesando",
@@ -261,7 +331,11 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     )
 
                 try:
-                    result = extract_expediente_text(project_root, expediente_id, report_progress)
+                    result = (
+                        extract_selected_files_text(project_root, expediente_id, memory_files, report_progress)
+                        if memory_files is not None
+                        else extract_expediente_text(project_root, expediente_id, report_progress)
+                    )
                 except OCRExtractionError as error:
                     update_analysis_state(expediente_id, estado="error", etapa=str(error))
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -274,7 +348,11 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     pagina=None,
                 )
                 try:
-                    classification = classify_expediente_documents(project_root, expediente_id)
+                    classification = classify_expediente_documents(
+                        project_root,
+                        expediente_id,
+                        tuple(item.documento for item in memory_files) if memory_files is not None else None,
+                    )
                 except ClassificationError as error:
                     update_analysis_state(expediente_id, estado="error", etapa=str(error))
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})

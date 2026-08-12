@@ -2,9 +2,14 @@
 
 ## Alcance operativo del MVP
 
-Los únicos expedientes que el sistema puede listar y analizar son las carpetas
-creadas manualmente en `Expedientes/<ID_EXPEDIENTE>/01_Documentos`. La persona
-analista debe elegir de forma explícita el ID del expediente en la interfaz.
+La persona analista selecciona desde la interfaz los archivos que desea
+analizar, sin importar la carpeta del computador donde se encuentren. El
+sistema recibe esos archivos temporalmente en memoria y no crea copias, no los
+mueve y no modifica los originales.
+
+Los resultados derivados y la trazabilidad sí se guardan bajo `Salida/` con el
+identificador temporal de la selección. La barra de estado debe acompañar las
+fases de OCR, clasificación, extracción, normalización, validación y concepto.
 
 Los casos ubicados fuera del proyecto, incluidos los de `GIOJ_PRUEBAS`, son
 material de consulta. No son una ruta configurada ni una entrada del motor de

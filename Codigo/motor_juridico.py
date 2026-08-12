@@ -281,16 +281,27 @@ def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
             "El resultado es una propuesta para revisión del analista jurídico."
         )
     details: list[str] = []
-    for item in failed[:5]:
+    for item in failed:
         comparisons = item.get("comparaciones", [])
-        comparison = comparisons[0] if isinstance(comparisons, list) and comparisons else {}
-        page = comparison.get("pagina_validada") or "sin página"
-        details.append(f"{item.get('id_regla')} ({comparison.get('documento_validado') or 'Escritura_Firma'}, página {page})")
-    return (
-        f"El análisis concluye {result} y registra {len(failed)} hallazgo(s) o ausencia(s) de evidencia. "
-        f"Controles principales: {', '.join(details)}. Revise la trazabilidad antes de emitir el concepto definitivo; "
-        "el sistema no reemplaza el criterio profesional."
-    )
+        comparisons = comparisons if isinstance(comparisons, list) and comparisons else [{}]
+        for comparison in comparisons:
+            if comparison.get("estado_interfaz") == "Validado":
+                continue
+            found = comparison.get("valor_encontrado")
+            if isinstance(found, list):
+                found = " | ".join(str(value) for value in found)
+            details.append(
+                f"{len(details) + 1}. {item.get('id_regla')}: archivo "
+                f"{comparison.get('documento_validado') or 'no identificado'}, página "
+                f"{comparison.get('pagina_validada') or 'sin página'}; valor esperado: "
+                f"{comparison.get('valor_esperado') or 'no disponible'}; valor encontrado: "
+                f"{found or 'no disponible'}."
+            )
+    return "\n".join((
+        f"El análisis concluye {result} y registra {len(details)} inconsistencia(s) o ausencia(s) de evidencia.",
+        *details,
+        "Revise la trazabilidad antes de emitir el concepto definitivo; el sistema no reemplaza el criterio profesional.",
+    ))
 
 
 def _logger(directory: Path) -> logging.Logger:

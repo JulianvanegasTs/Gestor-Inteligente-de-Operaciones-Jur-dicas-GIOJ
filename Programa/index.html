@@ -238,6 +238,7 @@
             padding: 14px;
             overflow-y: auto;
             border: 1px solid #e2e8f0;
+            white-space: pre-wrap;
         }
 
         .box-summary {
@@ -294,22 +295,8 @@
             background: #dc2626;
         }
 
-        .expediente-selector {
-            display: grid;
-            gap: 6px;
-            margin-top: 14px;
-            color: #1e3a5f;
-            font-size: 0.8rem;
-            font-weight: 700;
-        }
-
-        .expediente-selector select {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            color: #334155;
-            background: #fff;
+        #file-input {
+            display: none;
         }
 
         .validation-details {
@@ -419,11 +406,12 @@
         <!-- Sección Izquierda: Subida de Archivos -->
         <section class="card upload-section">
             <div class="top-action-bar">
-                <button class="btn-new-project" id="btn-refresh">
+                <button class="btn-new-project" id="btn-select">
                     <span class="plus-icon">+</span>
-                    ACTUALIZAR EXPEDIENTES
+                    SELECCIONAR ARCHIVOS
                 </button>
-                <span class="action-hint">(El analista crea cada carpeta manualmente en Expedientes)</span>
+                <span class="action-hint">(Puede elegir archivos desde cualquier carpeta)</span>
+                <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp">
             </div>
 
             <!-- Área Drag & Drop (Solo contiene los archivos) -->
@@ -434,19 +422,12 @@
                     <div class="icon-badge icon-doc">≡</div>
                 </div>
 
-                <p class="dropzone-status">Seleccione un expediente creado manualmente.</p>
+                <p class="dropzone-status">Seleccione los documentos que desea analizar.</p>
 
                 <ul class="file-list" id="file-list">
-                    <li class="file-item">Sin expediente seleccionado.</li>
+                    <li class="file-item">Sin archivos seleccionados.</li>
                 </ul>
             </div>
-
-            <label class="expediente-selector" for="expediente-select">
-                Expediente para analizar
-                <select id="expediente-select">
-                    <option value="">Seleccione un expediente…</option>
-                </select>
-            </label>
 
             <!-- Botón situado FUERA de la caja de archivos -->
             <button class="btn-start-analysis" id="btn-analyze">INICIAR ANÁLISIS</button>
@@ -504,7 +485,8 @@
     </footer>
 
     <script>
-        const btnRefresh = document.getElementById('btn-refresh');
+        const btnSelect = document.getElementById('btn-select');
+        const fileInput = document.getElementById('file-input');
         const btnAnalyze = document.getElementById('btn-analyze');
         const btnGenerate = document.getElementById('btn-generate');
         const fileList = document.getElementById('file-list');
@@ -512,14 +494,13 @@
         const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
-        const expedienteSelect = document.getElementById('expediente-select');
         const validationDetails = document.getElementById('validation-details');
         const progressContainer = document.getElementById('analysis-progress');
         const progressStage = document.getElementById('progress-stage');
         const progressPercent = document.getElementById('progress-percent');
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
-        let selectedExpedienteId = '';
+        let selectedSelectionId = '';
 
         const request = async (url, payload = {}) => {
             const response = await fetch(url, {
@@ -534,8 +515,12 @@
             target.textContent = message;
         };
 
-        const get = async url => {
-            const response = await fetch(url);
+        const selectFiles = async files => {
+            const form = new FormData();
+            for (const file of files) {
+                form.append('archivos', file, file.name);
+            }
+            const response = await fetch('/api/archivos/seleccion', {method: 'POST', body: form});
             return response.json();
         };
 
@@ -631,76 +616,54 @@
         };
 
         const showSelectionError = message => {
-            selectedExpedienteId = '';
+            selectedSelectionId = '';
             progressContainer.hidden = false;
             progressContainer.classList.add('is-error');
             progressFill.style.width = '0%';
             progressPercent.textContent = '0%';
             progressTrack.setAttribute('aria-valuenow', '0');
             progressStage.textContent = message;
-            showMessage(outputSummary, 'Seleccione un expediente antes de iniciar el análisis.');
+            showMessage(outputSummary, 'Seleccione los archivos antes de iniciar el análisis.');
             showMessage(outputInfo, message);
         };
 
-        const loadExpediente = async expedienteId => {
-            const result = await request('/api/expediente/seleccion', {id_expediente: expedienteId});
-            if (result.error || !Array.isArray(result.expediente?.documentos)) {
-                throw new Error(result.error || 'La respuesta del expediente no es válida.');
-            }
-            renderDocuments(result.expediente.documentos);
-            selectedExpedienteId = result.expediente.id;
-            expedienteSelect.value = selectedExpedienteId;
-            dropzoneStatus.textContent = `${result.expediente.documentos.length} archivo(s) cargado(s) del expediente.`;
-            actionHint.textContent = result.detalle;
-            showMessage(outputSummary, result.mensaje);
-            showMessage(outputInfo, result.detalle);
-            progressContainer.hidden = true;
-            progressContainer.classList.remove('is-error');
-        };
-
-        const refreshExpedientes = async () => {
-            const result = await get('/api/expedientes');
-            if (result.error || !Array.isArray(result.expedientes)) {
-                throw new Error(result.error || 'No fue posible listar los expedientes.');
-            }
-            expedienteSelect.replaceChildren(new Option('Seleccione un expediente…', ''));
-            for (const expediente of result.expedientes) {
-                expedienteSelect.add(new Option(`${expediente.id} (${expediente.documentos} archivo(s))`, expediente.id));
-            }
-        };
-
-        refreshExpedientes().catch(error => {
-            actionHint.textContent = error instanceof Error ? error.message : 'No fue posible listar los expedientes.';
+        btnSelect.addEventListener('click', () => {
+            fileInput.value = '';
+            fileInput.click();
         });
 
-        btnRefresh.addEventListener('click', async () => {
-            try {
-                const result = await request('/api/proyectos/nuevo');
-                showMessage(outputSummary, result.mensaje);
-                showMessage(outputInfo, result.detalle);
-                await refreshExpedientes();
-            } catch (_error) {
-                showMessage(outputSummary, 'No fue posible actualizar los expedientes.');
-            }
-        });
-
-        expedienteSelect.addEventListener('change', async () => {
-            if (!expedienteSelect.value) {
-                selectedExpedienteId = '';
+        fileInput.addEventListener('change', async () => {
+            const files = Array.from(fileInput.files || []);
+            if (!files.length) {
                 return;
             }
+            selectedSelectionId = '';
+            renderDocuments(files.map(file => ({nombre: file.name})));
+            dropzoneStatus.textContent = `${files.length} archivo(s) seleccionado(s).`;
+            actionHint.textContent = 'Preparando selección en memoria…';
             try {
-                await loadExpediente(expedienteSelect.value);
+                const result = await selectFiles(files);
+                if (result.error || !Array.isArray(result.seleccion?.documentos)) {
+                    throw new Error(result.error || 'La selección de archivos no es válida.');
+                }
+                selectedSelectionId = result.seleccion.id;
+                renderDocuments(result.seleccion.documentos);
+                dropzoneStatus.textContent = `${result.seleccion.documentos.length} archivo(s) listo(s) para análisis.`;
+                actionHint.textContent = result.detalle;
+                showMessage(outputSummary, result.mensaje);
+                showMessage(outputInfo, result.detalle);
+                progressContainer.hidden = true;
+                progressContainer.classList.remove('is-error');
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'No fue posible cargar el expediente.';
+                const message = error instanceof Error ? error.message : 'No fue posible seleccionar los archivos.';
                 actionHint.textContent = message;
                 showSelectionError(message);
             }
         });
 
         btnAnalyze.addEventListener('click', async () => {
-            if (!selectedExpedienteId) {
-                showSelectionError('Seleccione un valor en “Expediente para analizar” antes de iniciar el análisis.');
+            if (!selectedSelectionId) {
+                showSelectionError('Use “Seleccionar archivos” antes de iniciar el análisis.');
                 return;
             }
             const originalButtonText = btnAnalyze.textContent;
@@ -711,13 +674,13 @@
             progressFill.style.width = '0%';
             progressPercent.textContent = '0%';
             progressTrack.setAttribute('aria-valuenow', '0');
-            progressStage.textContent = 'Preparando el expediente';
+            progressStage.textContent = 'Preparando archivos seleccionados';
             showMessage(outputSummary, 'Extracción documental en curso.');
-            showMessage(outputInfo, 'Preparando el expediente…');
+            showMessage(outputInfo, 'Preparando archivos seleccionados…');
             const showProgress = async () => {
                 try {
                     const response = await fetch(
-                        `/api/analisis/progreso?id_expediente=${encodeURIComponent(selectedExpedienteId)}`
+                        `/api/analisis/progreso?id_expediente=${encodeURIComponent(selectedSelectionId)}`
                     );
                     const progress = await response.json();
                     const documentName = progress.documento ? progress.documento.split('/').pop() : '';
@@ -744,7 +707,7 @@
             await new Promise(resolve => window.requestAnimationFrame(resolve));
             const progressTimer = window.setInterval(showProgress, 1000);
             try {
-                const result = await request('/api/analisis/iniciar', {id_expediente: selectedExpedienteId});
+                const result = await request('/api/analisis/iniciar', {id_expediente: selectedSelectionId});
                 if (result.error) {
                     throw new Error(result.error);
                 }

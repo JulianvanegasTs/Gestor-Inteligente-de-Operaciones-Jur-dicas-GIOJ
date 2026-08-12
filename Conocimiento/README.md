@@ -35,6 +35,10 @@ forman parte de ninguna ruta de ejecución del MVP. Solo pueden consultarse de
 forma manual para proponer cambios a la arquitectura oficial, previa revisión
 humana; no agregan reglas ni modifican validaciones en tiempo de análisis.
 
+La selección libre de archivos en la interfaz tampoco habilita la consulta
+automática de esos casos: únicamente se procesan los archivos elegidos
+explícitamente por la persona analista.
+
 ---
 
 # Importante

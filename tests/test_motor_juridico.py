@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from Codigo.motor_juridico import LegalEngineError, apply_legal_engine
+from Codigo.motor_juridico import LegalEngineError, _legal_concept, apply_legal_engine
 
 
 def _workbook(path: Path) -> None:
@@ -85,6 +85,25 @@ def _validations(root: Path, first: str, second: str) -> None:
 
 
 class LegalEngineTests(unittest.TestCase):
+    def test_legal_concept_enumerates_inconsistencies_with_source_file(self) -> None:
+        concept = _legal_concept("No Conformidad", {
+            "MIN-001": {
+                "id_regla": "MIN-001",
+                "estado": "No cumple",
+                "comparaciones": [{
+                    "documento_validado": "escritura_firma.pdf",
+                    "pagina_validada": 4,
+                    "valor_esperado": "Texto de la minuta",
+                    "valor_encontrado": "Texto diferente",
+                    "estado_interfaz": "No validado",
+                }],
+            },
+        })
+
+        self.assertIn("1. MIN-001: archivo escritura_firma.pdf, página 4", concept)
+        self.assertIn("valor esperado: Texto de la minuta", concept)
+        self.assertIn("valor encontrado: Texto diferente", concept)
+
     def test_conformity_uses_the_matching_current_alternative(self) -> None:
         root = _project()
         _validations(root, "Cumple", "No cumple")

@@ -13,13 +13,14 @@ import subprocess
 import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
+from io import BytesIO
 from pathlib import Path
 from statistics import mean
 from typing import Callable
 from xml.etree import ElementTree
 
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
-from .expediente import DocumentoExpediente, Expediente, read_expediente
+from .expediente import ArchivoSeleccionado, DocumentoExpediente, Expediente, read_expediente
 
 
 class OCRExtractionError(RuntimeError):
@@ -129,6 +130,64 @@ def _run_tesseract(image_path: Path, language: str, command: str, include_confid
     return text, round(mean(values), 2) if values else None
 
 
+def _run_tesseract_bytes(
+    image_content: bytes, language: str, command: str, include_confidence: bool
+) -> tuple[str, float | None]:
+    """Ejecuta OCR desde entrada estándar para no crear una copia del archivo seleccionado."""
+    executable = shutil.which(command)
+    if executable is None:
+        raise OCRExtractionError(f"No se encontró el ejecutable OCR configurado: {command}")
+    base_command = [executable, "stdin", "stdout", "-l", language]
+    try:
+        result = subprocess.run(
+            [*base_command, "tsv"] if include_confidence else base_command,
+            input=image_content,
+            check=True,
+            capture_output=True,
+        )
+    except OSError as error:
+        raise OCRExtractionError(f"El OCR no pudo iniciarse: {error}") from error
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or b"").decode("utf-8", errors="replace").strip() or f"código de salida {error.returncode}"
+        raise OCRExtractionError(f"El OCR no pudo procesar la imagen: {detail}") from error
+    output = result.stdout.decode("utf-8", errors="replace")
+    if not include_confidence:
+        return output.strip(), None
+    values: list[float] = []
+    words_by_line: dict[tuple[str, str, str, str], list[str]] = {}
+    for line in output.splitlines()[1:]:
+        columns = line.split("\t")
+        if len(columns) >= 12 and columns[11].strip():
+            line_key = (columns[1], columns[2], columns[3], columns[4])
+            words_by_line.setdefault(line_key, []).append(columns[11].strip())
+            try:
+                confidence = float(columns[10])
+            except ValueError:
+                continue
+            if confidence >= 0:
+                values.append(confidence)
+    text = "\n".join(" ".join(words) for words in words_by_line.values()).strip()
+    return text, round(mean(values), 2) if values else None
+
+
+def _render_pdf_page_bytes(content: bytes, page_number: int, resolution: int) -> bytes:
+    """Renderiza una página PDF directamente desde memoria."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as error:
+        raise OCRExtractionError("Falta la dependencia pypdfium2 para procesar PDF escaneados en memoria") from error
+    try:
+        document = pdfium.PdfDocument(content)
+        page = document[page_number - 1]
+        bitmap = page.render(scale=resolution / 72)
+        image = bitmap.to_pil()
+        output = BytesIO()
+        image.save(output, format="PNG")
+        return output.getvalue()
+    except Exception as error:
+        raise OCRExtractionError(f"No fue posible renderizar la página PDF en memoria: {error}") from error
+
+
 def _render_pdf_page(path: Path, page_number: int, command: str, resolution: int) -> Path:
     executable = shutil.which(command)
     if executable is None:
@@ -220,6 +279,70 @@ def _extract_docx(
     except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as error:
         raise OCRExtractionError(f"No fue posible leer el documento Word: {error}") from error
     return [TextoExtraido(document.ubicacion_original, 1, "\n".join(item for item in paragraphs if item), "Documento Word")]
+
+
+def _extract_memory_document(
+    selected: ArchivoSeleccionado,
+    configuration: ProjectConfiguration,
+    progress: DocumentProgressCallback | None = None,
+) -> list[TextoExtraido]:
+    """Extrae un archivo seleccionado sin escribir su contenido en disco."""
+    document = selected.documento
+    content = selected.contenido
+    include_confidence = bool(_ocr_setting(configuration, "registrar_confianza", True))
+    language = str(_ocr_setting(configuration, "idioma", "spa"))
+    tesseract = str(_ocr_setting(configuration, "comando_tesseract", "tesseract"))
+    if document.categoria == "PDF":
+        try:
+            from pypdf import PdfReader
+        except ImportError as error:
+            raise OCRExtractionError("Falta la dependencia pypdf para leer PDF digitales") from error
+        try:
+            pages = [(page.extract_text() or "").strip() for page in PdfReader(BytesIO(content)).pages]
+        except Exception as error:
+            raise OCRExtractionError(f"No fue posible leer el PDF: {error}") from error
+        results: list[TextoExtraido] = []
+        for number, text in enumerate(pages, start=1):
+            if text:
+                if not bool(_ocr_setting(configuration, "permitir_pdf_digital", True)):
+                    raise OCRExtractionError("La extracción de PDF digitales está deshabilitada en la configuración")
+                if progress:
+                    progress(document.ubicacion_original, number, "Extrayendo texto del PDF digital")
+                results.append(TextoExtraido(document.ubicacion_original, number, text, "PDF digital"))
+                continue
+            if progress:
+                progress(document.ubicacion_original, number, "Aplicando OCR al PDF escaneado")
+            if not bool(_ocr_setting(configuration, "permitir_pdf_escaneado", True)):
+                raise OCRExtractionError("El OCR de PDF escaneados está deshabilitado en la configuración")
+            image_content = _render_pdf_page_bytes(
+                content, number, int(_ocr_setting(configuration, "resolucion_pdf", 300))
+            )
+            ocr_text, confidence = _run_tesseract_bytes(
+                image_content, language, tesseract, include_confidence
+            )
+            results.append(TextoExtraido(document.ubicacion_original, number, ocr_text, "OCR PDF escaneado", confidence))
+        return results
+    if document.categoria == "Imagen":
+        if not bool(_ocr_setting(configuration, "permitir_imagenes", True)):
+            raise OCRExtractionError("El OCR de imágenes está deshabilitado en la configuración")
+        if progress:
+            progress(document.ubicacion_original, 1, "Aplicando OCR a la imagen")
+        text, confidence = _run_tesseract_bytes(content, language, tesseract, include_confidence)
+        return [TextoExtraido(document.ubicacion_original, 1, text, "OCR imagen", confidence)]
+    if Path(document.nombre).suffix.casefold() == ".docx":
+        if progress:
+            progress(document.ubicacion_original, 1, "Extrayendo texto del documento Word")
+        namespace = {"word": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        try:
+            with zipfile.ZipFile(BytesIO(content)) as archive:
+                xml_content = archive.read("word/document.xml")
+            root = ElementTree.fromstring(xml_content)
+            paragraphs = ["".join(node.itertext()).strip() for node in root.findall(".//word:p", namespace)]
+        except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as error:
+            raise OCRExtractionError(f"No fue posible leer el documento Word: {error}") from error
+        text = "\n".join(item for item in paragraphs if item)
+        return [TextoExtraido(document.ubicacion_original, 1, text, "Documento Word")]
+    raise OCRExtractionError(f"Formato no compatible para extracción: {Path(document.nombre).suffix or 'sin extensión'}")
 
 
 def _extract_document(
@@ -355,3 +478,73 @@ def extract_expediente_text(
     relative_output = output.relative_to(configuration.project_root).as_posix()
     logger.info("OCR COMPLETADO | %s | %s texto(s) | %s error(es)", expediente.id_expediente, len(texts), len(errors))
     return ResultadoOCR(expediente.id_expediente, tuple(texts), tuple(errors), relative_output)
+
+
+def extract_selected_files_text(
+    project_root: Path,
+    selection_id: str,
+    files: tuple[ArchivoSeleccionado, ...],
+    progress: ProgressCallback | None = None,
+) -> ResultadoOCR:
+    """Extrae archivos recibidos por la interfaz, conservándolos únicamente en memoria."""
+    if not files:
+        raise OCRExtractionError("Seleccione al menos un archivo para analizar")
+    try:
+        configuration = load_configuration(project_root)
+    except ConfigurationError as error:
+        raise OCRExtractionError(str(error)) from error
+    logger = _ocr_logger(configuration.route("logs"))
+    texts: list[TextoExtraido] = []
+    errors: list[ErrorOCR] = []
+    _write_result(configuration, ResultadoOCR(selection_id, (), (), ""))
+    if not bool(_ocr_setting(configuration, "habilitado", True)):
+        detail = "El OCR está deshabilitado en la configuración"
+        errors.extend(ErrorOCR(item.documento.nombre, None, detail) for item in files)
+        provisional = ResultadoOCR(selection_id, (), tuple(errors), "")
+        output = _write_result(configuration, provisional)
+        return ResultadoOCR(selection_id, (), tuple(errors), output.relative_to(configuration.project_root).as_posix())
+    units: list[int] = []
+    for selected in files:
+        if selected.documento.categoria == "PDF":
+            try:
+                from pypdf import PdfReader
+
+                units.append(max(1, len(PdfReader(BytesIO(selected.contenido)).pages)))
+            except Exception:
+                units.append(1)
+        else:
+            units.append(1)
+    total_units = sum(units)
+    completed_units = 0
+    if progress:
+        progress("", None, 0, total_units, "Preparando archivos seleccionados")
+    for selected, document_units in zip(files, units):
+        document = selected.documento
+        if progress:
+            progress(document.nombre, None, completed_units, total_units, "Iniciando documento")
+
+        def report_document_progress(documento: str, pagina: int | None, etapa: str) -> None:
+            page_offset = max(0, min(document_units, (pagina or 1) - 1))
+            if progress:
+                progress(documento, pagina, completed_units + page_offset, total_units, etapa)
+
+        try:
+            extracted = _extract_memory_document(selected, configuration, report_document_progress)
+        except OCRExtractionError as error:
+            errors.append(ErrorOCR(document.nombre, None, str(error)))
+            logger.error("OCR ERROR | %s | %s", document.nombre, error)
+            completed_units += document_units
+            _write_result(configuration, ResultadoOCR(selection_id, tuple(texts), tuple(errors), ""))
+            continue
+        texts.extend(extracted)
+        for item in extracted:
+            logger.info("TEXTO EXTRAIDO | %s | pagina=%s | metodo=%s", item.documento, item.pagina, item.metodo)
+        completed_units += document_units
+        _write_result(configuration, ResultadoOCR(selection_id, tuple(texts), tuple(errors), ""))
+        if progress:
+            progress(document.nombre, None, completed_units, total_units, "Documento completado")
+    provisional = ResultadoOCR(selection_id, tuple(texts), tuple(errors), "")
+    output = _write_result(configuration, provisional)
+    relative_output = output.relative_to(configuration.project_root).as_posix()
+    logger.info("OCR COMPLETADO | %s | %s texto(s) | %s error(es)", selection_id, len(texts), len(errors))
+    return ResultadoOCR(selection_id, tuple(texts), tuple(errors), relative_output)

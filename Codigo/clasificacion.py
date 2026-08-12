@@ -14,7 +14,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
-from .expediente import ExpedienteError, read_expediente
+from .expediente import DocumentoExpediente, ExpedienteError, read_expediente
 
 
 _MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -354,24 +354,31 @@ def _write_result(configuration: ProjectConfiguration, result: ResultadoClasific
     return target
 
 
-def classify_expediente_documents(project_root: Path, expediente_id: str) -> ResultadoClasificacion:
+def classify_expediente_documents(
+    project_root: Path,
+    expediente_id: str,
+    selected_documents: tuple[DocumentoExpediente, ...] | None = None,
+) -> ResultadoClasificacion:
     """Clasifica todos los documentos originales a partir del resultado OCR y la arquitectura."""
     try:
         configuration = load_configuration(project_root)
-        expediente = read_expediente(configuration.project_root, expediente_id)
+        expediente = read_expediente(configuration.project_root, expediente_id) if selected_documents is None else None
     except (ConfigurationError, ExpedienteError) as error:
         raise ClassificationError(str(error)) from error
+    documents_to_classify = expediente.documentos if expediente is not None else selected_documents
+    if not documents_to_classify:
+        raise ClassificationError("No hay documentos seleccionados para clasificar")
     definitions = load_document_types(configuration)
     texts_by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for text in _load_ocr_texts(configuration, expediente.id_expediente):
+    for text in _load_ocr_texts(configuration, expediente_id):
         document = text.get("documento")
         if isinstance(document, str):
             texts_by_document[document].append(text)
     documents = tuple(
         _classify_document(document.ubicacion_original, texts_by_document[document.ubicacion_original], definitions)
-        for document in expediente.documentos
+        for document in documents_to_classify
     )
-    provisional = ResultadoClasificacion(expediente.id_expediente, documents, "")
+    provisional = ResultadoClasificacion(expediente_id, documents, "")
     output = _write_result(configuration, provisional)
     logger = _classification_logger(configuration.route("logs"))
     for document in documents:
@@ -381,5 +388,5 @@ def classify_expediente_documents(project_root: Path, expediente_id: str) -> Res
             document.estado,
             document.codigo_tipo_documental or "sin tipo",
         )
-    logger.info("CLASIFICACION COMPLETADA | %s | %s documento(s)", expediente.id_expediente, len(documents))
-    return ResultadoClasificacion(expediente.id_expediente, documents, output.relative_to(configuration.project_root).as_posix())
+    logger.info("CLASIFICACION COMPLETADA | %s | %s documento(s)", expediente_id, len(documents))
+    return ResultadoClasificacion(expediente_id, documents, output.relative_to(configuration.project_root).as_posix())
