@@ -501,14 +501,19 @@
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
         let selectedSelectionId = '';
+        const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000 y vuelva a seleccionar los archivos.';
 
         const request = async (url, payload = {}) => {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            return response.json();
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                return response.json();
+            } catch (_error) {
+                throw new Error(serverUnavailableMessage);
+            }
         };
 
         const showMessage = (target, message) => {
@@ -520,8 +525,12 @@
             for (const file of files) {
                 form.append('archivos', file, file.name);
             }
-            const response = await fetch('/api/archivos/seleccion', {method: 'POST', body: form});
-            return response.json();
+            try {
+                const response = await fetch('/api/archivos/seleccion', {method: 'POST', body: form});
+                return response.json();
+            } catch (_error) {
+                throw new Error(serverUnavailableMessage);
+            }
         };
 
         const renderValidationTable = (title, columns, rows) => {
@@ -627,9 +636,20 @@
             showMessage(outputInfo, message);
         };
 
-        btnSelect.addEventListener('click', () => {
-            fileInput.value = '';
-            fileInput.click();
+        btnSelect.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/estado');
+                if (!response.ok) {
+                    throw new Error(serverUnavailableMessage);
+                }
+                fileInput.value = '';
+                fileInput.click();
+            } catch (_error) {
+                selectedSelectionId = '';
+                actionHint.textContent = serverUnavailableMessage;
+                showMessage(outputSummary, 'No fue posible conectar con el servidor local.');
+                showMessage(outputInfo, serverUnavailableMessage);
+            }
         });
 
         fileInput.addEventListener('change', async () => {

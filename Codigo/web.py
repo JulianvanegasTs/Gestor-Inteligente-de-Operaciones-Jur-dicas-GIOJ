@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import threading
 from dataclasses import asdict
 from email.parser import BytesParser
@@ -23,6 +24,18 @@ from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_files_text
 from .validacion import ValidationError, validate_expediente_data
+
+
+class GIOJThreadingHTTPServer(ThreadingHTTPServer):
+    """Servidor local exclusivo: evita dividir una selección en memoria entre procesos."""
+
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self) -> None:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 CLIENT_CONNECTOR = """
@@ -492,7 +505,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
         def log_message(self, _format: str, *_args: object) -> None:
             """Evita registrar datos del navegador fuera de los logs de GIOJ."""
 
-    return ThreadingHTTPServer(("127.0.0.1", port), GIOJRequestHandler)
+    return GIOJThreadingHTTPServer(("127.0.0.1", port), GIOJRequestHandler)
 
 
 def serve_interface(project_root: Path, port: int = 0) -> int:
@@ -501,7 +514,13 @@ def serve_interface(project_root: Path, port: int = 0) -> int:
     if not report.is_ready:
         print(report.to_console())
         return 1
-    server = create_server(project_root, port)
+    try:
+        server = create_server(project_root, port)
+    except OSError:
+        print(
+            f"No fue posible iniciar GIOJ en el puerto {port}: ya existe otro servidor local usando ese puerto."
+        )
+        return 1
     address, selected_port = server.server_address[:2]
     print(f"Interfaz GIOJ disponible en http://{address}:{selected_port}/")
     try:

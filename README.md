@@ -135,6 +135,16 @@ el backend: **Seleccionar archivos** recibe temporalmente los documentos en
 memoria y **Iniciar análisis** ejecuta clasificación, OCR, extracción,
 normalización, validación y concepto jurídico.
 
+El servidor debe permanecer ejecutándose mientras se usa la interfaz. Si se
+cierra la terminal o el proceso local, la página puede continuar visible en el
+navegador, pero no podrá recibir ni analizar archivos. En ese caso, inicie de
+nuevo el comando anterior, recargue la página y vuelva a seleccionar los
+documentos.
+
+Mantenga una sola instancia del servidor en el puerto 8000. La selección se
+conserva en memoria del proceso que la recibe; por seguridad, GIOJ rechaza el
+inicio de una segunda instancia sobre el mismo puerto.
+
 ## Requisito permanente de progreso
 
 La interfaz oficial debe conservar una barra de estado sencilla y visible

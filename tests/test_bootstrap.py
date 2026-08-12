@@ -135,6 +135,16 @@ class BootstrapTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_interface_port_cannot_be_shared_by_two_server_processes(self) -> None:
+        root = self.create_project()
+        server = create_server(root)
+        try:
+            port = int(server.server_address[1])
+            with self.assertRaises(OSError):
+                create_server(root, port)
+        finally:
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
