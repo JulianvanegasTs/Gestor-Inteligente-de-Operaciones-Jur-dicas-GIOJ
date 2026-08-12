@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from contextlib import redirect_stdout
+from io import StringIO
 import tempfile
 import threading
 import unittest
@@ -12,7 +14,7 @@ from pathlib import Path
 
 from Codigo.bootstrap import initialize_project
 from Codigo.config import ConfigurationError, resolve_project_path
-from Codigo.web import create_server
+from Codigo.web import create_server, serve_interface
 
 
 SHEETS = {
@@ -143,6 +145,23 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 create_server(root, port)
         finally:
+            server.server_close()
+
+    def test_interface_start_is_idempotent_when_gioj_is_already_running(self) -> None:
+        root = self.create_project()
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            output = StringIO()
+            with redirect_stdout(output):
+                exit_code = serve_interface(root, port)
+            self.assertEqual(exit_code, 0)
+            self.assertIn(f"GIOJ ya está activo en http://127.0.0.1:{port}/", output.getvalue())
+            self.assertIn("recargue esa página", output.getvalue())
+        finally:
+            server.shutdown()
             server.server_close()
 
 

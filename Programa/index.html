@@ -501,7 +501,7 @@
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
         let selectedSelectionId = '';
-        const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000 y vuelva a seleccionar los archivos.';
+        const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000, recargue esta página y vuelva a seleccionar los archivos.';
 
         const request = async (url, payload = {}) => {
             try {
@@ -638,9 +638,16 @@
 
         btnSelect.addEventListener('click', async () => {
             try {
-                const response = await fetch('/api/estado');
+                const response = await fetch('/api/estado', {cache: 'no-store'});
                 if (!response.ok) {
                     throw new Error(serverUnavailableMessage);
+                }
+                actionHint.textContent = '(Puede elegir archivos desde cualquier carpeta)';
+                progressContainer.classList.remove('is-error');
+                if (!selectedSelectionId) {
+                    progressContainer.hidden = true;
+                    showMessage(outputSummary, '');
+                    showMessage(outputInfo, '');
                 }
                 fileInput.value = '';
                 fileInput.click();

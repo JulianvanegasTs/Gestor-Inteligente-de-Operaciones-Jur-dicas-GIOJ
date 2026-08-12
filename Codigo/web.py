@@ -12,7 +12,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
+from urllib.request import urlopen
 from uuid import uuid4
 
 from .bootstrap import StartupReport, initialize_project
@@ -508,8 +510,32 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     return GIOJThreadingHTTPServer(("127.0.0.1", port), GIOJRequestHandler)
 
 
+def _existing_gioj_url(port: int) -> str | None:
+    """Reconoce una instancia GIOJ ya activa para que el arranque sea idempotente."""
+    if port <= 0:
+        return None
+    base_url = f"http://127.0.0.1:{port}/"
+    try:
+        with urlopen(f"{base_url}api/estado", timeout=1) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if not isinstance(payload.get("listo"), bool) or not isinstance(payload.get("diagnosticos"), list):
+        return None
+    return base_url
+
+
 def serve_interface(project_root: Path, port: int = 0) -> int:
     """Inicia la interfaz local cuando la configuración del proyecto es válida."""
+    existing_url = _existing_gioj_url(port)
+    if existing_url:
+        print(
+            f"GIOJ ya está activo en {existing_url} "
+            "No es necesario iniciar otra instancia; recargue esa página para continuar."
+        )
+        return 0
     report = initialize_project(project_root)
     if not report.is_ready:
         print(report.to_console())
@@ -517,8 +543,16 @@ def serve_interface(project_root: Path, port: int = 0) -> int:
     try:
         server = create_server(project_root, port)
     except OSError:
+        existing_url_after_bind = _existing_gioj_url(port)
+        if existing_url_after_bind:
+            print(
+                f"GIOJ ya está activo en {existing_url_after_bind} "
+                "No es necesario iniciar otra instancia; recargue esa página para continuar."
+            )
+            return 0
         print(
-            f"No fue posible iniciar GIOJ en el puerto {port}: ya existe otro servidor local usando ese puerto."
+            f"No fue posible iniciar GIOJ en el puerto {port}: "
+            "otro programa está usando ese puerto y no corresponde a una instancia disponible de GIOJ."
         )
         return 1
     address, selected_port = server.server_address[:2]

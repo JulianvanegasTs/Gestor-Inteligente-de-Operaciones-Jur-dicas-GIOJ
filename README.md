@@ -142,8 +142,10 @@ nuevo el comando anterior, recargue la página y vuelva a seleccionar los
 documentos.
 
 Mantenga una sola instancia del servidor en el puerto 8000. La selección se
-conserva en memoria del proceso que la recibe; por seguridad, GIOJ rechaza el
-inicio de una segunda instancia sobre el mismo puerto.
+conserva en memoria del proceso que la recibe. Si ejecuta nuevamente el comando
+mientras GIOJ ya está activo, la terminal mostrará la dirección de la instancia
+existente; no es un error ni es necesario iniciar otro proceso. Recargue esa
+página antes de volver a seleccionar los documentos.
 
 ## Requisito permanente de progreso
 
