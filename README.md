@@ -135,6 +135,17 @@ el backend: Nuevo Proyecto valida el entorno, la selección registra únicamente
 los nombres de archivos y los pasos de análisis/generación muestran que serán
 habilitados en sus tareas posteriores.
 
+## Requisito permanente de progreso
+
+La interfaz oficial debe conservar una barra de estado sencilla y visible
+inmediatamente debajo del botón **Iniciar análisis**. Al comenzar el proceso
+debe mostrar la etapa vigente y el porcentaje, actualizar `aria-valuenow`
+durante el análisis y finalizar en `100%` o indicar visualmente el error.
+
+Este componente forma parte de la interfaz aprobada. Los ciclos futuros no
+deben retirarlo, ocultarlo detrás del panel de resultados ni sustituirlo sin
+autorización funcional. La prueba `tests.test_ocr` protege este requisito.
+
 ---
 
 # Lectura del expediente (GIOJ-003)

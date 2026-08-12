@@ -39,3 +39,17 @@ Separar completamente la lógica jurídica del código fuente.
 El programa únicamente interpreta esta arquitectura.
 
 Nunca debe modificarla.
+
+---
+
+# Requisito permanente de interfaz
+
+La interfaz oficial debe mantener una barra de estado sencilla, ubicada debajo
+del botón **Iniciar análisis** y visible mientras se ejecuta el flujo. Debe
+mostrar la etapa actual, el porcentaje y el progreso accesible mediante
+`role="progressbar"` y `aria-valuenow`.
+
+Este control visual no modifica el motor jurídico ni las reglas de
+`Arquitectura.xlsx`, pero es obligatorio para todos los ciclos de integración
+de la interfaz. No debe eliminarse ni trasladarse a un área que pueda quedar
+oculta durante el análisis.

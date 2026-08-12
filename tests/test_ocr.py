@@ -102,14 +102,19 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(progress["completadas"], 1)
         self.assertEqual(progress["total"], 1)
 
-    def test_official_interface_contains_accessible_progress_bar_and_time_estimate(self) -> None:
+    def test_official_interface_contains_simple_accessible_progress_below_analysis_button(self) -> None:
         interface = (Path(__file__).parent.parent / "Programa" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn('id="analysis-progress"', interface)
         self.assertIn('role="progressbar"', interface)
         self.assertIn('id="progress-percent"', interface)
-        self.assertIn('id="progress-remaining"', interface)
-        self.assertIn("Restante estimado", interface)
+        self.assertIn('aria-valuenow="0"', interface)
+        self.assertLess(interface.index('id="btn-analyze"'), interface.index('id="analysis-progress"'))
+        self.assertLess(
+            interface.index('id="analysis-progress"'),
+            interface.index('<section class="card results-section">'),
+        )
+        self.assertNotIn('id="progress-remaining"', interface)
         self.assertIn('id="validation-details"', interface)
         self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)
