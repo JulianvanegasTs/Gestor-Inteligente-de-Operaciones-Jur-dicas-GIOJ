@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
 from .extraccion import ExtractionError, extract_expediente_data
-from .expediente import ExpedienteError, find_expediente_id, list_expedientes, read_expediente
+from .expediente import ExpedienteError, list_expedientes, read_expediente
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text
@@ -201,14 +201,14 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 self._send_json(status, {
                     **_report_payload(report),
                     "mensaje": "Proyecto inicializado." if report.is_ready else "El proyecto no está listo.",
-                    "detalle": "Seleccione los documentos del expediente para continuar.",
+                    "detalle": "Actualice la lista y seleccione un expediente creado manualmente en Expedientes.",
                 })
                 return
             if self.path == "/api/expediente/seleccion":
                 expediente_id = payload.get("id_expediente")
                 try:
                     if not isinstance(expediente_id, str) or not expediente_id.strip():
-                        expediente_id = find_expediente_id(project_root, payload.get("documentos", []))
+                        raise ExpedienteError("Seleccione un expediente disponible creado en Expedientes antes de analizar.")
                     expediente = read_expediente(project_root, expediente_id)
                 except ExpedienteError as error:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})

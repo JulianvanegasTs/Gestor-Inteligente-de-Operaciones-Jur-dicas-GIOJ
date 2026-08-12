@@ -1,5 +1,15 @@
 # Arquitectura del Sistema
 
+## Alcance operativo del MVP
+
+Los únicos expedientes que el sistema puede listar y analizar son las carpetas
+creadas manualmente en `Expedientes/<ID_EXPEDIENTE>/01_Documentos`. La persona
+analista debe elegir de forma explícita el ID del expediente en la interfaz.
+
+Los casos ubicados fuera del proyecto, incluidos los de `GIOJ_PRUEBAS`, son
+material de consulta. No son una ruta configurada ni una entrada del motor de
+análisis.
+
 Esta carpeta contiene toda la configuración funcional del proyecto.
 
 El sistema obtiene desde estos archivos todas las reglas necesarias para ejecutar el análisis.

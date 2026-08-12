@@ -28,14 +28,14 @@ Contiene cada expediente que será analizado.
 Conocimiento/
 Contiene la base documental utilizada por la IA.
 
-Los casos documentales de prueba se almacenan fuera del repositorio en la ruta
-relativa configurada `../GIOJ_PRUEBAS/Casos`. Estos antecedentes no se
-versionan en Git, no son expedientes activos y no reemplazan las reglas de
-`Arquitectura.xlsx`.
+Durante el MVP, los expedientes operativos son creados manualmente por el
+analista únicamente bajo `Expedientes/<ID_EXPEDIENTE>/01_Documentos`. La
+interfaz lista esas carpetas y el motor solo puede analizar un expediente
+seleccionado desde esa ubicación.
 
-La integración de casos permanece desactivada durante el MVP mediante
-`ia.usar_casos` en `Arquitectura/config.json`. La ruta queda registrada para
-pruebas controladas futuras, sin enviar los documentos al repositorio.
+Los casos conservados fuera del proyecto son antecedentes de consulta humana.
+No se configuran como entrada del motor, no se consultan durante el análisis y
+no reemplazan las reglas de `Arquitectura.xlsx`.
 
 Programa/
 Contiene el código fuente del sistema.
@@ -146,11 +146,9 @@ Este componente forma parte de la interfaz aprobada. Los ciclos futuros no
 deben retirarlo, ocultarlo detrás del panel de resultados ni sustituirlo sin
 autorización funcional. La prueba `tests.test_ocr` protege este requisito.
 
-La selección debe hacerse preferiblemente con **Expediente disponible**. Este
-selector carga de forma explícita una carpeta bajo `Expedientes/` y evita que
-el análisis dependa de nombres de archivos que puedan repetirse en varios
-casos. La selección de archivos continúa disponible como alternativa cuando
-sus nombres identifican una carpeta única.
+La selección se hace exclusivamente con **Expediente para analizar**. Este
+selector carga una carpeta creada manualmente bajo `Expedientes/`; la interfaz
+no carga archivos sueltos ni consulta carpetas externas durante el análisis.
 
 ---
 
@@ -344,11 +342,11 @@ python -m unittest tests.test_motor_juridico -v
 
 ## Casos de regresión
 
-La hoja `06_Casos_Prueba` documenta los diez expedientes revisados en la ruta
-relativa configurada `../GIOJ_PRUEBAS/Casos`. Incluye los casos críticos de campos vacíos,
+La hoja `06_Casos_Prueba` documenta antecedentes de consulta: campos vacíos,
 instrucciones internas, bloques duplicados, equivalencias de cuantía, orden de
-secciones y cadenas de poderes. La ejecución de desarrollo debe usar copias en
-`Expedientes/Pruebas/`; los resultados se guardan en `Salida/{id_expediente}`.
+secciones y cadenas de poderes. No es una fuente de ejecución. Las pruebas de
+desarrollo deben usar expedientes creados bajo `Expedientes/Pruebas/`; los
+resultados se guardan en `Salida/{id_expediente}`.
 
 Las pruebas deterministas de validación y consolidación se ejecutan con:
 

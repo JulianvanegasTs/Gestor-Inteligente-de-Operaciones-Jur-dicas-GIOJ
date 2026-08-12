@@ -129,7 +129,7 @@ class ExpedienteTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def test_selection_endpoint_identifies_expediente_from_attached_names(self) -> None:
+    def test_selection_endpoint_requires_an_explicit_expediente(self) -> None:
         root = create_project()
         documents = root / "Expedientes" / "EXP-005" / "01_Documentos"
         documents.mkdir(parents=True)
@@ -145,9 +145,8 @@ class ExpedienteTests(unittest.TestCase):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urlopen(request) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            self.assertEqual(payload["expediente"]["id"], "EXP-005")
+            with self.assertRaisesRegex(Exception, "HTTP Error 400"):
+                urlopen(request)
         finally:
             server.shutdown()
             server.server_close()

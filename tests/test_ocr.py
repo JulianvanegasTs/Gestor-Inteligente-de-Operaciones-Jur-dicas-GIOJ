@@ -109,6 +109,8 @@ class OCRTests(unittest.TestCase):
         self.assertIn('role="progressbar"', interface)
         self.assertIn('id="progress-percent"', interface)
         self.assertIn('id="expediente-select"', interface)
+        self.assertIn('id="btn-refresh"', interface)
+        self.assertNotIn('id="file-input"', interface)
         self.assertIn('aria-valuenow="0"', interface)
         self.assertLess(interface.index('id="btn-analyze"'), interface.index('id="analysis-progress"'))
         self.assertLess(
@@ -116,7 +118,7 @@ class OCRTests(unittest.TestCase):
             interface.index('<section class="card results-section">'),
         )
         self.assertNotIn('id="progress-remaining"', interface)
-        self.assertIn('Seleccione un valor en “Expediente disponible”', interface)
+        self.assertIn('Seleccione un valor en “Expediente para analizar”', interface)
         self.assertIn('id="validation-details"', interface)
         self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)

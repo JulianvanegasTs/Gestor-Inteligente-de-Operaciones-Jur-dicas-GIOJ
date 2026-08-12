@@ -28,17 +28,12 @@ Configuracion/
 
 Catálogos auxiliares.
 
-Casos externos
+Casos externos de consulta
 
-Los casos históricos y de prueba no se almacenan dentro de `Conocimiento/` ni
-se versionan en Git. Su ubicación relativa configurada es
-`../GIOJ_PRUEBAS/Casos`.
-
-Cada caso externo conserva `01_Documentos`, `02_Datos_estructurados` y
-`03_Resultados`. Durante el MVP su consumo permanece desactivado. La
-organización externa no agrega reglas jurídicas ni modifica las validaciones
-vigentes; cualquier observación histórica requiere revisión humana antes de
-proponerse como cambio a la arquitectura oficial.
+Los casos históricos y de prueba se mantienen fuera de `Conocimiento/` y no
+forman parte de ninguna ruta de ejecución del MVP. Solo pueden consultarse de
+forma manual para proponer cambios a la arquitectura oficial, previa revisión
+humana; no agregan reglas ni modifican validaciones en tiempo de análisis.
 
 ---
 

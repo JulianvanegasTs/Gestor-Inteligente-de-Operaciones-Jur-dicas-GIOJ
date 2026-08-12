@@ -399,10 +399,6 @@
             margin-top: 20px;
         }
 
-        #file-input {
-            display: none;
-        }
-
         @media (max-width: 900px) {
             .main-container {
                 grid-template-columns: 1fr;
@@ -423,12 +419,11 @@
         <!-- Sección Izquierda: Subida de Archivos -->
         <section class="card upload-section">
             <div class="top-action-bar">
-                <button class="btn-new-project" id="btn-upload">
+                <button class="btn-new-project" id="btn-refresh">
                     <span class="plus-icon">+</span>
-                    CREAR NUEVO PROYECTO
+                    ACTUALIZAR EXPEDIENTES
                 </button>
-                <span class="action-hint">(Haga clic o arrastre archivos aquí)</span>
-                <input type="file" id="file-input" multiple accept=".pdf,.docx,.doc,.txt">
+                <span class="action-hint">(El analista crea cada carpeta manualmente en Expedientes)</span>
             </div>
 
             <!-- Área Drag & Drop (Solo contiene los archivos) -->
@@ -439,16 +434,15 @@
                     <div class="icon-badge icon-doc">≡</div>
                 </div>
 
-                <p class="dropzone-status">Archivos cargados listos para análisis.</p>
+                <p class="dropzone-status">Seleccione un expediente creado manualmente.</p>
 
                 <ul class="file-list" id="file-list">
-                    <li class="file-item">documento1.pdf (3.2 MB)</li>
-                    <li class="file-item">reporte_final.docx (1.8 MB)</li>
+                    <li class="file-item">Sin expediente seleccionado.</li>
                 </ul>
             </div>
 
             <label class="expediente-selector" for="expediente-select">
-                Expediente disponible
+                Expediente para analizar
                 <select id="expediente-select">
                     <option value="">Seleccione un expediente…</option>
                 </select>
@@ -510,8 +504,7 @@
     </footer>
 
     <script>
-        const btnUpload = document.getElementById('btn-upload');
-        const fileInput = document.getElementById('file-input');
+        const btnRefresh = document.getElementById('btn-refresh');
         const btnAnalyze = document.getElementById('btn-analyze');
         const btnGenerate = document.getElementById('btn-generate');
         const fileList = document.getElementById('file-list');
@@ -680,45 +673,14 @@
             actionHint.textContent = error instanceof Error ? error.message : 'No fue posible listar los expedientes.';
         });
 
-        btnUpload.addEventListener('click', async () => {
+        btnRefresh.addEventListener('click', async () => {
             try {
                 const result = await request('/api/proyectos/nuevo');
                 showMessage(outputSummary, result.mensaje);
                 showMessage(outputInfo, result.detalle);
                 await refreshExpedientes();
             } catch (_error) {
-                showMessage(outputSummary, 'No fue posible iniciar el proyecto.');
-            }
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', async () => {
-            const selectedNames = Array.from(fileInput.files, file => file.name);
-            if (selectedNames.length === 0) {
-                return;
-            }
-
-            renderDocuments(selectedNames.map(nombre => ({nombre})));
-            selectedExpedienteId = '';
-            expedienteSelect.value = '';
-            dropzoneStatus.textContent = `${selectedNames.length} archivo(s) seleccionado(s).`;
-            actionHint.textContent = 'Validando expediente...';
-
-            try {
-                const result = await request('/api/expediente/seleccion', {documentos: selectedNames});
-                if (result.error || !Array.isArray(result.expediente?.documentos)) {
-                    throw new Error(result.error || 'La respuesta del expediente no es válida.');
-                }
-                renderDocuments(result.expediente.documentos);
-                selectedExpedienteId = result.expediente.id;
-                dropzoneStatus.textContent = `${result.expediente.documentos.length} archivo(s) cargado(s) del expediente.`;
-                actionHint.textContent = result.detalle;
-                showMessage(outputSummary, result.mensaje);
-                showMessage(outputInfo, result.detalle);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : 'No fue posible cargar el expediente.';
-                actionHint.textContent = message;
-                showSelectionError(`${message} Seleccione la carpeta en “Expediente disponible”.`);
+                showMessage(outputSummary, 'No fue posible actualizar los expedientes.');
             }
         });
 
@@ -738,7 +700,7 @@
 
         btnAnalyze.addEventListener('click', async () => {
             if (!selectedExpedienteId) {
-                showSelectionError('Seleccione un valor en “Expediente disponible” antes de iniciar el análisis.');
+                showSelectionError('Seleccione un valor en “Expediente para analizar” antes de iniciar el análisis.');
                 return;
             }
             const originalButtonText = btnAnalyze.textContent;

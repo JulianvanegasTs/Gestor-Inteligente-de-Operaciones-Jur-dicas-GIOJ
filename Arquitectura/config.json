@@ -127,14 +127,18 @@
   "ia": {
     "usar_conocimiento_local": true,
     "carpeta": "./Conocimiento/",
-    "usar_analisis_historicos": true,
-    "usar_casos": false,
-    "carpeta_casos": "../GIOJ_PRUEBAS/Casos",
+    "usar_analisis_historicos": false,
     "usar_normatividad": true,
     "usar_jurisprudencia": true,
     "usar_modelos": true,
     "usar_catalogos": true,
     "usar_reglas_negocio": true
+  },
+
+  "mvp": {
+    "origen_expedientes": "Expedientes",
+    "seleccion_manual_expediente": true,
+    "consultar_casos_externos_en_analisis": false
   },
 
   "desarrollo": {
