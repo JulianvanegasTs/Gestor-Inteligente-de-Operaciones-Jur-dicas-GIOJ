@@ -146,6 +146,12 @@ Este componente forma parte de la interfaz aprobada. Los ciclos futuros no
 deben retirarlo, ocultarlo detrás del panel de resultados ni sustituirlo sin
 autorización funcional. La prueba `tests.test_ocr` protege este requisito.
 
+La selección debe hacerse preferiblemente con **Expediente disponible**. Este
+selector carga de forma explícita una carpeta bajo `Expedientes/` y evita que
+el análisis dependa de nombres de archivos que puedan repetirse en varios
+casos. La selección de archivos continúa disponible como alternativa cuando
+sus nombres identifican una carpeta única.
+
 ---
 
 # Lectura del expediente (GIOJ-003)

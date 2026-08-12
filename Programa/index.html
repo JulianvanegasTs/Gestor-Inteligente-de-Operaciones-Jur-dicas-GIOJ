@@ -294,6 +294,24 @@
             background: #dc2626;
         }
 
+        .expediente-selector {
+            display: grid;
+            gap: 6px;
+            margin-top: 14px;
+            color: #1e3a5f;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .expediente-selector select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            color: #334155;
+            background: #fff;
+        }
+
         .validation-details {
             display: grid;
             gap: 14px;
@@ -429,6 +447,13 @@
                 </ul>
             </div>
 
+            <label class="expediente-selector" for="expediente-select">
+                Expediente disponible
+                <select id="expediente-select">
+                    <option value="">Seleccione un expediente…</option>
+                </select>
+            </label>
+
             <!-- Botón situado FUERA de la caja de archivos -->
             <button class="btn-start-analysis" id="btn-analyze">INICIAR ANÁLISIS</button>
 
@@ -494,6 +519,7 @@
         const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
+        const expedienteSelect = document.getElementById('expediente-select');
         const validationDetails = document.getElementById('validation-details');
         const progressContainer = document.getElementById('analysis-progress');
         const progressStage = document.getElementById('progress-stage');
@@ -513,6 +539,11 @@
 
         const showMessage = (target, message) => {
             target.textContent = message;
+        };
+
+        const get = async url => {
+            const response = await fetch(url);
+            return response.json();
         };
 
         const renderValidationTable = (title, columns, rows) => {
@@ -606,11 +637,55 @@
             }
         };
 
+        const showSelectionError = message => {
+            selectedExpedienteId = '';
+            progressContainer.hidden = false;
+            progressContainer.classList.add('is-error');
+            progressFill.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressTrack.setAttribute('aria-valuenow', '0');
+            progressStage.textContent = message;
+            showMessage(outputSummary, 'Seleccione un expediente antes de iniciar el análisis.');
+            showMessage(outputInfo, message);
+        };
+
+        const loadExpediente = async expedienteId => {
+            const result = await request('/api/expediente/seleccion', {id_expediente: expedienteId});
+            if (result.error || !Array.isArray(result.expediente?.documentos)) {
+                throw new Error(result.error || 'La respuesta del expediente no es válida.');
+            }
+            renderDocuments(result.expediente.documentos);
+            selectedExpedienteId = result.expediente.id;
+            expedienteSelect.value = selectedExpedienteId;
+            dropzoneStatus.textContent = `${result.expediente.documentos.length} archivo(s) cargado(s) del expediente.`;
+            actionHint.textContent = result.detalle;
+            showMessage(outputSummary, result.mensaje);
+            showMessage(outputInfo, result.detalle);
+            progressContainer.hidden = true;
+            progressContainer.classList.remove('is-error');
+        };
+
+        const refreshExpedientes = async () => {
+            const result = await get('/api/expedientes');
+            if (result.error || !Array.isArray(result.expedientes)) {
+                throw new Error(result.error || 'No fue posible listar los expedientes.');
+            }
+            expedienteSelect.replaceChildren(new Option('Seleccione un expediente…', ''));
+            for (const expediente of result.expedientes) {
+                expedienteSelect.add(new Option(`${expediente.id} (${expediente.documentos} archivo(s))`, expediente.id));
+            }
+        };
+
+        refreshExpedientes().catch(error => {
+            actionHint.textContent = error instanceof Error ? error.message : 'No fue posible listar los expedientes.';
+        });
+
         btnUpload.addEventListener('click', async () => {
             try {
                 const result = await request('/api/proyectos/nuevo');
                 showMessage(outputSummary, result.mensaje);
                 showMessage(outputInfo, result.detalle);
+                await refreshExpedientes();
             } catch (_error) {
                 showMessage(outputSummary, 'No fue posible iniciar el proyecto.');
             }
@@ -624,6 +699,8 @@
             }
 
             renderDocuments(selectedNames.map(nombre => ({nombre})));
+            selectedExpedienteId = '';
+            expedienteSelect.value = '';
             dropzoneStatus.textContent = `${selectedNames.length} archivo(s) seleccionado(s).`;
             actionHint.textContent = 'Validando expediente...';
 
@@ -641,14 +718,27 @@
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'No fue posible cargar el expediente.';
                 actionHint.textContent = message;
-                showMessage(outputSummary, 'No fue posible confirmar el expediente.');
-                showMessage(outputInfo, message);
+                showSelectionError(`${message} Seleccione la carpeta en “Expediente disponible”.`);
+            }
+        });
+
+        expedienteSelect.addEventListener('change', async () => {
+            if (!expedienteSelect.value) {
+                selectedExpedienteId = '';
+                return;
+            }
+            try {
+                await loadExpediente(expedienteSelect.value);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'No fue posible cargar el expediente.';
+                actionHint.textContent = message;
+                showSelectionError(message);
             }
         });
 
         btnAnalyze.addEventListener('click', async () => {
             if (!selectedExpedienteId) {
-                showMessage(outputSummary, 'Seleccione un expediente antes de iniciar el análisis.');
+                showSelectionError('Seleccione un valor en “Expediente disponible” antes de iniciar el análisis.');
                 return;
             }
             const originalButtonText = btnAnalyze.textContent;

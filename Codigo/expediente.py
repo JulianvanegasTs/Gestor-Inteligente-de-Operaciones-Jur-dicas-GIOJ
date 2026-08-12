@@ -118,6 +118,24 @@ def find_expediente_id(project_root: Path, document_names: list[str]) -> str:
     return matches[0]
 
 
+def list_expedientes(project_root: Path) -> tuple[Expediente, ...]:
+    """Lista los expedientes disponibles para selección explícita en la interfaz."""
+    try:
+        configuration = load_configuration(project_root)
+        expedientes_root = configuration.route("expedientes")
+    except ConfigurationError as error:
+        raise ExpedienteError(str(error)) from error
+    if not expedientes_root.is_dir():
+        return ()
+    available: list[Expediente] = []
+    for directory in sorted(expedientes_root.iterdir(), key=lambda item: item.name.casefold()):
+        if directory.is_dir() and (directory / "01_Documentos").is_dir():
+            expediente = read_expediente(configuration.project_root, directory.name)
+            if expediente.documentos:
+                available.append(expediente)
+    return tuple(available)
+
+
 def read_expediente(project_root: Path, expediente_id: str) -> Expediente:
     """Construye el objeto Expediente sin procesar el contenido de sus documentos."""
     root, expedientes_root, document_directory = _resolve_documents_directory(project_root, expediente_id)

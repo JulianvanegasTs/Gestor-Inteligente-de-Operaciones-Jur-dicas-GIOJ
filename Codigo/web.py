@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
 from .extraccion import ExtractionError, extract_expediente_data
-from .expediente import ExpedienteError, find_expediente_id, read_expediente
+from .expediente import ExpedienteError, find_expediente_id, list_expedientes, read_expediente
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text
@@ -167,6 +167,19 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 return
             if parsed.path == "/api/estado":
                 self._send_json(HTTPStatus.OK, _report_payload(initialize_project(project_root)))
+                return
+            if parsed.path == "/api/expedientes":
+                try:
+                    expedientes = list_expedientes(project_root)
+                except ExpedienteError as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                self._send_json(HTTPStatus.OK, {
+                    "expedientes": [
+                        {"id": item.id_expediente, "documentos": len(item.documentos)}
+                        for item in expedientes
+                    ],
+                })
                 return
             if parsed.path == "/api/analisis/progreso":
                 expediente_id = parse_qs(parsed.query).get("id_expediente", [""])[0]

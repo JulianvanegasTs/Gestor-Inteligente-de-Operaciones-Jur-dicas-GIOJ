@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from Codigo.expediente import ExpedienteError, find_expediente_id, read_expediente
+from Codigo.expediente import ExpedienteError, find_expediente_id, list_expedientes, read_expediente
 from Codigo.web import create_server
 
 
@@ -71,6 +71,35 @@ class ExpedienteTests(unittest.TestCase):
         (documents / "unico.pdf").write_bytes(b"sin procesar")
 
         self.assertEqual(find_expediente_id(root, ["unico.pdf"]), "EXP-004")
+
+    def test_list_expedientes_returns_only_folders_with_documents(self) -> None:
+        root = create_project()
+        valid = root / "Expedientes" / "EXP-006" / "01_Documentos"
+        valid.mkdir(parents=True)
+        (valid / "archivo.pdf").write_bytes(b"sin procesar")
+        (root / "Expedientes" / "BORRADOR").mkdir()
+        (root / "Expedientes" / "_PLANTILLA_EXPEDIENTE" / "01_Documentos").mkdir(parents=True)
+
+        available = list_expedientes(root)
+
+        self.assertEqual([(item.id_expediente, len(item.documentos)) for item in available], [("EXP-006", 1)])
+
+    def test_available_expedientes_endpoint_returns_explicit_choices(self) -> None:
+        root = create_project()
+        documents = root / "Expedientes" / "EXP-007" / "01_Documentos"
+        documents.mkdir(parents=True)
+        (documents / "soporte.pdf").write_bytes(b"sin procesar")
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            with urlopen(f"http://{address}:{port}/api/expedientes") as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(payload["expedientes"], [{"id": "EXP-007", "documentos": 1}])
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_selection_endpoint_reads_only_the_selected_expediente(self) -> None:
         root = create_project()
