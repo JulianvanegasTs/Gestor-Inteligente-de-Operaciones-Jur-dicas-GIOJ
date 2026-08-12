@@ -209,6 +209,8 @@ class OCRTests(unittest.TestCase):
         self.assertIn('El servidor local no está disponible.', interface)
         self.assertIn("fetch('/api/estado', {cache: 'no-store'})", interface)
         self.assertIn('recargue esta página', interface)
+        self.assertIn('tamano_maximo_seleccion_mb', interface)
+        self.assertIn('supera el límite configurado', interface)
         self.assertIn('id="validation-details"', interface)
         self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)

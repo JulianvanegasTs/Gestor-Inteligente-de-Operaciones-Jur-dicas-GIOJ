@@ -7,6 +7,10 @@ analizar, sin importar la carpeta del computador donde se encuentren. El
 sistema recibe esos archivos temporalmente en memoria y no crea copias, no los
 mueve y no modifica los originales.
 
+El límite total de la selección se define en `config.json` mediante
+`mvp.tamano_maximo_seleccion_mb`; la interfaz debe consultarlo y mostrar un
+mensaje de tamaño explícito antes de transmitir una selección que lo exceda.
+
 Los resultados derivados y la trazabilidad sí se guardan bajo `Salida/` con el
 identificador temporal de la selección. La barra de estado debe acompañar las
 fases de OCR, clasificación, extracción, normalización, validación y concepto.

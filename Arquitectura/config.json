@@ -142,7 +142,7 @@
     "procesamiento_archivos": "memoria",
     "copiar_archivos_seleccionados": false,
     "seleccion_manual_expediente": false,
-    "tamano_maximo_seleccion_mb": 100,
+    "tamano_maximo_seleccion_mb": 250,
     "consultar_casos_externos_en_analisis": false
   },
 

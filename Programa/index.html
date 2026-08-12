@@ -501,6 +501,7 @@
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
         let selectedSelectionId = '';
+        let maxSelectionMb = 100;
         const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000, recargue esta página y vuelva a seleccionar los archivos.';
 
         const request = async (url, payload = {}) => {
@@ -642,6 +643,11 @@
                 if (!response.ok) {
                     throw new Error(serverUnavailableMessage);
                 }
+                const status = await response.json();
+                const configuredLimit = Number(status.limites?.tamano_maximo_seleccion_mb);
+                if (Number.isFinite(configuredLimit) && configuredLimit > 0) {
+                    maxSelectionMb = configuredLimit;
+                }
                 actionHint.textContent = '(Puede elegir archivos desde cualquier carpeta)';
                 progressContainer.classList.remove('is-error');
                 if (!selectedSelectionId) {
@@ -667,6 +673,13 @@
             selectedSelectionId = '';
             renderDocuments(files.map(file => ({nombre: file.name})));
             dropzoneStatus.textContent = `${files.length} archivo(s) seleccionado(s).`;
+            const selectionMb = files.reduce((total, file) => total + file.size, 0) / (1024 * 1024);
+            if (selectionMb > maxSelectionMb) {
+                const message = `La selección pesa ${selectionMb.toFixed(2)} MB y supera el límite configurado de ${maxSelectionMb} MB.`;
+                actionHint.textContent = message;
+                showSelectionError(message);
+                return;
+            }
             actionHint.textContent = 'Preparando selección en memoria…';
             try {
                 const result = await selectFiles(files);

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from Codigo.bootstrap import initialize_project
 from Codigo.config import ConfigurationError, resolve_project_path
-from Codigo.web import create_server, serve_interface
+from Codigo.web import create_server, serve_interface, stop_interface
 
 
 SHEETS = {
@@ -162,6 +162,23 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn("recargue esa página", output.getvalue())
         finally:
             server.shutdown()
+            server.server_close()
+
+    def test_interface_can_be_stopped_from_another_terminal(self) -> None:
+        root = self.create_project()
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            output = StringIO()
+            with redirect_stdout(output):
+                exit_code = stop_interface(port)
+            thread.join(timeout=2)
+            self.assertEqual(exit_code, 0)
+            self.assertFalse(thread.is_alive())
+            self.assertIn("Servidor GIOJ detenido.", output.getvalue())
+        finally:
             server.server_close()
 
 

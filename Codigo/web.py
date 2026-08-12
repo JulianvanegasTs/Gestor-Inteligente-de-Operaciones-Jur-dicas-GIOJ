@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from .bootstrap import StartupReport, initialize_project
@@ -221,7 +221,9 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 self.wfile.write(body)
                 return
             if parsed.path == "/api/estado":
-                self._send_json(HTTPStatus.OK, _report_payload(initialize_project(project_root)))
+                payload = _report_payload(initialize_project(project_root))
+                payload["limites"] = {"tamano_maximo_seleccion_mb": max_selection_mb}
+                self._send_json(HTTPStatus.OK, payload)
                 return
             if parsed.path == "/api/expedientes":
                 try:
@@ -245,6 +247,10 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/servidor/detener":
+                self._send_json(HTTPStatus.OK, {"mensaje": "Servidor GIOJ detenido."})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             if self.path == "/api/archivos/seleccion":
                 try:
                     files = self._read_selected_files()
@@ -525,6 +531,23 @@ def _existing_gioj_url(port: int) -> str | None:
     if not isinstance(payload.get("listo"), bool) or not isinstance(payload.get("diagnosticos"), list):
         return None
     return base_url
+
+
+def stop_interface(port: int = 8000) -> int:
+    """Detiene de forma limpia una instancia local de GIOJ desde otra terminal."""
+    existing_url = _existing_gioj_url(port)
+    if not existing_url:
+        print(f"No hay una instancia disponible de GIOJ en http://127.0.0.1:{port}/")
+        return 1
+    request = Request(f"{existing_url}api/servidor/detener", data=b"", method="POST")
+    try:
+        with urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError):
+        print(f"No fue posible detener GIOJ en {existing_url}")
+        return 1
+    print(str(payload.get("mensaje", "Servidor GIOJ detenido.")))
+    return 0
 
 
 def serve_interface(project_root: Path, port: int = 0) -> int:

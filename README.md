@@ -147,6 +147,12 @@ mientras GIOJ ya está activo, la terminal mostrará la dirección de la instanc
 existente; no es un error ni es necesario iniciar otro proceso. Recargue esa
 página antes de volver a seleccionar los documentos.
 
+Para detener limpiamente la instancia desde cualquier terminal, ejecute:
+
+```powershell
+python -m Codigo detener --puerto 8000
+```
+
 ## Requisito permanente de progreso
 
 La interfaz oficial debe conservar una barra de estado sencilla y visible
@@ -170,7 +176,8 @@ permanece en memoria y solo los resultados derivados se escriben en `Salida/`.
 El botón **Seleccionar archivos** admite PDF, DOCX e imágenes compatibles
 desde cualquier ubicación accesible para el navegador. Se rechazan archivos
 vacíos, formatos no compatibles y nombres duplicados dentro de una misma
-selección. El límite total del MVP es 100 MB.
+selección. El límite total configurado del MVP es 250 MB. Si se excede, la
+interfaz informa el tamaño seleccionado antes de intentar la transmisión.
 
 Los bytes seleccionados permanecen únicamente en la memoria del servidor
 local. Los archivos fuente no se escriben en `Expedientes/` ni en otra carpeta.
