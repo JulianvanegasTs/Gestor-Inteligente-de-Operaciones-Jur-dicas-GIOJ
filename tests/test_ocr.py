@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import io
 import subprocess
 import tempfile
 import threading
@@ -16,7 +15,7 @@ from urllib.request import Request, urlopen
 from Codigo.config import load_configuration
 from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.extraccion import ResultadoExtraccion
-from Codigo.expediente import DocumentoExpediente, create_selected_file
+from Codigo.expediente import DocumentoExpediente, create_selected_path
 from Codigo.motor_juridico import ResultadoMotorJuridico, ResumenMotorJuridico
 from Codigo.normalizacion import ResultadoNormalizacion, ResumenNormalizacion
 from Codigo.ocr import (
@@ -26,7 +25,7 @@ from Codigo.ocr import (
     _extract_pdf,
     _run_tesseract,
     extract_expediente_text,
-    extract_selected_files_text,
+    extract_selected_paths_text,
 )
 from Codigo.validacion import ResultadoValidaciones, ResumenValidacion
 from Codigo.web import create_server
@@ -44,45 +43,62 @@ def create_project() -> Path:
 
 
 class OCRTests(unittest.TestCase):
-    def test_selected_docx_is_processed_from_memory_without_creating_a_source_copy(self) -> None:
+    def test_selected_docx_is_processed_from_its_original_path_without_a_copy(self) -> None:
         root = create_project()
-        content = io.BytesIO()
-        with zipfile.ZipFile(content, "w") as archive:
+        source = root / "fuente" / "escritura.docx"
+        source.parent.mkdir()
+        with zipfile.ZipFile(source, "w") as archive:
             archive.writestr(
                 "word/document.xml",
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
                 "<w:body><w:p><w:r><w:t>Escritura para firma</w:t></w:r></w:p></w:body></w:document>",
             )
-        selected = create_selected_file("escritura.docx", content.getvalue())
+        selected = create_selected_path(source)
 
-        result = extract_selected_files_text(root, "SEL-MEMORIA", (selected,))
+        result = extract_selected_paths_text(root, "SEL-RUTA", (selected,))
 
         self.assertEqual(result.textos[0].documento, "escritura.docx")
         self.assertEqual(result.textos[0].texto, "Escritura para firma")
         self.assertFalse((root / "Expedientes").exists())
         self.assertTrue((root / result.archivo_salida).is_file())
+        self.assertNotIn(str(source.resolve()), (root / result.archivo_salida).read_text(encoding="utf-8"))
 
-    def test_file_selection_endpoint_accepts_multipart_and_does_not_create_copies(self) -> None:
+    def test_missing_selected_original_is_reported_without_exposing_its_path(self) -> None:
         root = create_project()
+        source = root / "fuente" / "faltante.pdf"
+        source.parent.mkdir()
+        source.write_bytes(b"original")
+        selected = create_selected_path(source)
+        source.unlink()
+
+        result = extract_selected_paths_text(root, "SEL-FALTANTE", (selected,))
+
+        self.assertEqual(result.textos, ())
+        self.assertEqual(result.errores[0].documento, "faltante.pdf")
+        self.assertIn("ya no está disponible", result.errores[0].detalle)
+        saved = (root / result.archivo_salida).read_text(encoding="utf-8")
+        self.assertNotIn(str(source.resolve()), saved)
+
+    def test_native_file_selection_reads_original_paths_without_creating_copies(self) -> None:
+        root = create_project()
+        source = root / "origen" / "escritura.docx"
+        source.parent.mkdir()
+        source.write_bytes(b"contenido-seleccionado")
+        selected = create_selected_path(source)
         server = create_server(root)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        boundary = "gioj-test-boundary"
-        body = (
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="archivos"; filename="escritura.docx"\r\n'
-            "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n"
-        ).encode("utf-8") + b"contenido-seleccionado" + f"\r\n--{boundary}--\r\n".encode("utf-8")
         try:
             address, port = server.server_address[:2]
             request = Request(
-                f"http://{address}:{port}/api/archivos/seleccion",
-                data=body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                f"http://{address}:{port}/api/archivos/seleccion/nativa",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urlopen(request) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            with patch("Codigo.web.select_files_with_native_dialog", return_value=(selected,)):
+                with urlopen(request) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
             selection_id = payload["seleccion"]["id"]
             extracted = TextoExtraido("escritura.docx", 1, "texto", "Documento Word")
             classification = ResultadoClasificacion(
@@ -92,9 +108,9 @@ class OCRTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "Codigo.web.extract_selected_files_text",
+                    "Codigo.web.extract_selected_paths_text",
                     return_value=ResultadoOCR(selection_id, (extracted,), (), f"Salida/{selection_id}/texto_extraido.json"),
-                ) as memory_ocr,
+                ) as direct_ocr,
                 patch("Codigo.web.classify_expediente_documents", return_value=classification) as classify,
                 patch("Codigo.web.extract_expediente_data", return_value=ResultadoExtraccion(selection_id, (), (), f"Salida/{selection_id}/extraccion_documental.json")),
                 patch("Codigo.web.normalize_expediente_data", return_value=ResultadoNormalizacion(selection_id, (), (), f"Salida/{selection_id}/normalizacion_documental.json", ResumenNormalizacion(0, 0, 0, ()))),
@@ -115,9 +131,10 @@ class OCRTests(unittest.TestCase):
 
         self.assertTrue(payload["seleccion"]["id"].startswith("SEL-"))
         self.assertEqual(payload["seleccion"]["documentos"][0]["nombre"], "escritura.docx")
-        self.assertIn("solo en memoria", payload["detalle"])
+        self.assertIn("ubicación original", payload["detalle"])
+        self.assertNotIn(str(source.resolve()), json.dumps(payload, ensure_ascii=False))
         self.assertEqual(analysis["mensaje"], "Resultado jurídico: Conformidad.")
-        self.assertEqual(memory_ocr.call_args.args[2][0].contenido, b"contenido-seleccionado")
+        self.assertEqual(direct_ocr.call_args.args[2][0].ruta_origen, source.resolve())
         self.assertEqual(classify.call_args.args[2][0].ubicacion_original, "escritura.docx")
         self.assertFalse((root / "Expedientes").exists())
 
@@ -197,7 +214,7 @@ class OCRTests(unittest.TestCase):
         self.assertIn('id="progress-percent"', interface)
         self.assertNotIn('id="expediente-select"', interface)
         self.assertIn('id="btn-select"', interface)
-        self.assertIn('id="file-input"', interface)
+        self.assertNotIn('id="file-input"', interface)
         self.assertIn('aria-valuenow="0"', interface)
         self.assertLess(interface.index('id="btn-analyze"'), interface.index('id="analysis-progress"'))
         self.assertLess(
@@ -209,8 +226,9 @@ class OCRTests(unittest.TestCase):
         self.assertIn('El servidor local no está disponible.', interface)
         self.assertIn("fetch('/api/estado', {cache: 'no-store'})", interface)
         self.assertIn('recargue esta página', interface)
-        self.assertIn('tamano_maximo_seleccion_mb', interface)
-        self.assertIn('supera el límite configurado', interface)
+        self.assertIn('/api/archivos/seleccion/nativa', interface)
+        self.assertIn('selector nativo de Windows', interface)
+        self.assertIn('No fue posible seleccionar los archivos.', interface)
         self.assertIn('id="validation-details"', interface)
         self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)

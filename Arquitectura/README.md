@@ -3,13 +3,15 @@
 ## Alcance operativo del MVP
 
 La persona analista selecciona desde la interfaz los archivos que desea
-analizar, sin importar la carpeta del computador donde se encuentren. El
-sistema recibe esos archivos temporalmente en memoria y no crea copias, no los
-mueve y no modifica los originales.
+analizar, sin importar la carpeta del computador donde se encuentren. El botón
+abre el selector nativo de Windows. El sistema conserva solo las rutas de la
+sesión y lee los originales al iniciar el análisis: no crea copias, no mueve ni
+modifica los documentos.
 
-El límite total de la selección se define en `config.json` mediante
-`mvp.tamano_maximo_seleccion_mb`; la interfaz debe consultarlo y mostrar un
-mensaje de tamaño explícito antes de transmitir una selección que lo exceda.
+Las rutas absolutas no se incluyen en la interfaz, los logs ni las salidas; la
+trazabilidad conserva únicamente el nombre del documento. Si el archivo se
+mueve, se renombra o se elimina antes del análisis, GIOJ registra el error y
+continúa con los demás documentos cuando sea posible.
 
 Los resultados derivados y la trazabilidad sí se guardan bajo `Salida/` con el
 identificador temporal de la selección. La barra de estado debe acompañar las

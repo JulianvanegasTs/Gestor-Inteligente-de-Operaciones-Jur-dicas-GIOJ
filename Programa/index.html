@@ -295,10 +295,6 @@
             background: #dc2626;
         }
 
-        #file-input {
-            display: none;
-        }
-
         .validation-details {
             display: grid;
             gap: 14px;
@@ -411,7 +407,6 @@
                     SELECCIONAR ARCHIVOS
                 </button>
                 <span class="action-hint">(Puede elegir archivos desde cualquier carpeta)</span>
-                <input type="file" id="file-input" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp">
             </div>
 
             <!-- Área Drag & Drop (Solo contiene los archivos) -->
@@ -486,7 +481,6 @@
 
     <script>
         const btnSelect = document.getElementById('btn-select');
-        const fileInput = document.getElementById('file-input');
         const btnAnalyze = document.getElementById('btn-analyze');
         const btnGenerate = document.getElementById('btn-generate');
         const fileList = document.getElementById('file-list');
@@ -501,7 +495,6 @@
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
         let selectedSelectionId = '';
-        let maxSelectionMb = 100;
         const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000, recargue esta página y vuelva a seleccionar los archivos.';
 
         const request = async (url, payload = {}) => {
@@ -519,19 +512,6 @@
 
         const showMessage = (target, message) => {
             target.textContent = message;
-        };
-
-        const selectFiles = async files => {
-            const form = new FormData();
-            for (const file of files) {
-                form.append('archivos', file, file.name);
-            }
-            try {
-                const response = await fetch('/api/archivos/seleccion', {method: 'POST', body: form});
-                return response.json();
-            } catch (_error) {
-                throw new Error(serverUnavailableMessage);
-            }
         };
 
         const renderValidationTable = (title, columns, rows) => {
@@ -643,48 +623,25 @@
                 if (!response.ok) {
                     throw new Error(serverUnavailableMessage);
                 }
-                const status = await response.json();
-                const configuredLimit = Number(status.limites?.tamano_maximo_seleccion_mb);
-                if (Number.isFinite(configuredLimit) && configuredLimit > 0) {
-                    maxSelectionMb = configuredLimit;
-                }
-                actionHint.textContent = '(Puede elegir archivos desde cualquier carpeta)';
+                await response.json();
+                actionHint.textContent = 'Abriendo selector nativo de Windows…';
                 progressContainer.classList.remove('is-error');
                 if (!selectedSelectionId) {
                     progressContainer.hidden = true;
                     showMessage(outputSummary, '');
                     showMessage(outputInfo, '');
                 }
-                fileInput.value = '';
-                fileInput.click();
-            } catch (_error) {
-                selectedSelectionId = '';
-                actionHint.textContent = serverUnavailableMessage;
-                showMessage(outputSummary, 'No fue posible conectar con el servidor local.');
-                showMessage(outputInfo, serverUnavailableMessage);
-            }
-        });
-
-        fileInput.addEventListener('change', async () => {
-            const files = Array.from(fileInput.files || []);
-            if (!files.length) {
-                return;
-            }
-            selectedSelectionId = '';
-            renderDocuments(files.map(file => ({nombre: file.name})));
-            dropzoneStatus.textContent = `${files.length} archivo(s) seleccionado(s).`;
-            const selectionMb = files.reduce((total, file) => total + file.size, 0) / (1024 * 1024);
-            if (selectionMb > maxSelectionMb) {
-                const message = `La selección pesa ${selectionMb.toFixed(2)} MB y supera el límite configurado de ${maxSelectionMb} MB.`;
-                actionHint.textContent = message;
-                showSelectionError(message);
-                return;
-            }
-            actionHint.textContent = 'Preparando selección en memoria…';
-            try {
-                const result = await selectFiles(files);
-                if (result.error || !Array.isArray(result.seleccion?.documentos)) {
-                    throw new Error(result.error || 'La selección de archivos no es válida.');
+                const result = await request('/api/archivos/seleccion/nativa');
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                if (!result.seleccion?.id || !Array.isArray(result.seleccion.documentos)) {
+                    renderDocuments([]);
+                    dropzoneStatus.textContent = 'Seleccione los documentos que desea analizar.';
+                    actionHint.textContent = result.detalle || '(Puede elegir archivos desde cualquier carpeta)';
+                    showMessage(outputSummary, result.mensaje || 'No se seleccionaron archivos.');
+                    showMessage(outputInfo, result.detalle || '');
+                    return;
                 }
                 selectedSelectionId = result.seleccion.id;
                 renderDocuments(result.seleccion.documentos);
@@ -695,9 +652,11 @@
                 progressContainer.hidden = true;
                 progressContainer.classList.remove('is-error');
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'No fue posible seleccionar los archivos.';
+                const message = error instanceof Error ? error.message : serverUnavailableMessage;
+                selectedSelectionId = '';
                 actionHint.textContent = message;
-                showSelectionError(message);
+                showMessage(outputSummary, 'No fue posible seleccionar los archivos.');
+                showMessage(outputInfo, message);
             }
         });
 

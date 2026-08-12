@@ -6,8 +6,6 @@ import json
 import socket
 import threading
 from dataclasses import asdict
-from email.parser import BytesParser
-from email.policy import default as email_policy
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,15 +19,21 @@ from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
 from .config import ConfigurationError, load_configuration
 from .extraccion import ExtractionError, extract_expediente_data
-from .expediente import ArchivoSeleccionado, ExpedienteError, create_selected_file, list_expedientes, read_expediente
+from .expediente import (
+    ArchivoSeleccionadoRuta,
+    ExpedienteError,
+    list_expedientes,
+    read_expediente,
+    select_files_with_native_dialog,
+)
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
-from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_files_text
+from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_paths_text
 from .validacion import ValidationError, validate_expediente_data
 
 
 class GIOJThreadingHTTPServer(ThreadingHTTPServer):
-    """Servidor local exclusivo: evita dividir una selección en memoria entre procesos."""
+    """Servidor local exclusivo: conserva una única selección temporal por sesión."""
 
     allow_reuse_address = False
     daemon_threads = True
@@ -38,97 +42,6 @@ class GIOJThreadingHTTPServer(ThreadingHTTPServer):
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
-
-
-CLIENT_CONNECTOR = """
-<script>
-(() => {
-  const request = async (url, payload = {}) => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
-    });
-    return response.json();
-  };
-  const replaceButton = (id, handler) => {
-    const current = document.getElementById(id);
-    const replacement = current.cloneNode(true);
-    current.replaceWith(replacement);
-    replacement.addEventListener('click', handler);
-    return replacement;
-  };
-  const hint = document.querySelector('.action-hint');
-  const input = document.getElementById('file-input');
-  const fileList = document.getElementById('file-list');
-  const summary = document.getElementById('output-summary');
-  const info = document.getElementById('output-info');
-  const dropzoneStatus = document.querySelector('.dropzone-status');
-  let selectedExpedienteId = '';
-  const show = (target, message) => { target.textContent = message; };
-  const renderDocuments = (documents) => {
-    fileList.textContent = '';
-    for (const document of documents) {
-      const item = document.createElement('li');
-      item.className = 'file-item';
-      item.textContent = `${document.nombre} (${document.categoria})`;
-      fileList.appendChild(item);
-    }
-  };
-
-  replaceButton('btn-upload', async () => {
-    const result = await request('/api/proyectos/nuevo');
-    show(summary, result.mensaje);
-    show(info, result.detalle);
-    input.removeAttribute('webkitdirectory');
-    input.removeAttribute('directory');
-    input.click();
-  });
-  input.addEventListener('change', async () => {
-    const files = [...input.files];
-    const documents = files.map(file => file.name);
-    const firstPath = files[0]?.webkitRelativePath || '';
-    const selectedDirectory = firstPath.split('/')[0];
-    const expedienteId = selectedDirectory === '01_Documentos' ? '' : selectedDirectory;
-    renderDocuments(documents.map(nombre => ({nombre, categoria: 'Archivo seleccionado'})));
-    dropzoneStatus.textContent = `${documents.length} archivo(s) seleccionado(s). Validando expediente...`;
-    try {
-      const result = await request('/api/expediente/seleccion', {
-        id_expediente: expedienteId,
-        documentos: documents
-      });
-      if (result.error || !Array.isArray(result.expediente?.documentos)) {
-        const message = result.error || 'La respuesta del expediente no es válida.';
-        show(summary, 'No fue posible cargar el expediente.');
-        show(info, message);
-        hint.textContent = message;
-        return;
-      }
-      const registeredDocuments = result.expediente.documentos;
-      selectedExpedienteId = result.expediente.id;
-      renderDocuments(registeredDocuments);
-      dropzoneStatus.textContent = `${registeredDocuments.length} archivo(s) cargado(s) del expediente.`;
-      hint.textContent = result.detalle;
-    } catch (_error) {
-      const message = 'No fue posible comunicarse con el lector del expediente.';
-      show(summary, 'No fue posible cargar el expediente.');
-      show(info, message);
-      hint.textContent = message;
-    }
-  });
-  replaceButton('btn-analyze', async () => {
-    const result = await request('/api/analisis/iniciar', {id_expediente: selectedExpedienteId});
-    show(summary, result.mensaje);
-    show(info, result.detalle);
-  });
-  replaceButton('btn-generate', async () => {
-    const result = await request('/api/documento/generar');
-    show(summary, result.mensaje);
-    show(info, result.detalle);
-  });
-})();
-</script>
-""".strip()
 
 
 def _report_payload(report: StartupReport) -> dict[str, Any]:
@@ -147,15 +60,8 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     interface_path = project_root / "Programa" / "index.html"
     analysis_states: dict[str, dict[str, Any]] = {}
     analysis_states_lock = threading.Lock()
-    selected_files: dict[str, tuple[ArchivoSeleccionado, ...]] = {}
-    selected_files_lock = threading.Lock()
-    try:
-        mvp_settings = load_configuration(project_root).values.get("mvp", {})
-        max_selection_mb = int(mvp_settings.get("tamano_maximo_seleccion_mb", 100)) if isinstance(mvp_settings, dict) else 100
-    except (ConfigurationError, TypeError, ValueError):
-        max_selection_mb = 100
-    max_selection_bytes = max(1, max_selection_mb) * 1024 * 1024
-
+    selected_paths_by_selection: dict[str, tuple[ArchivoSeleccionadoRuta, ...]] = {}
+    selected_paths_lock = threading.Lock()
     def update_analysis_state(expediente_id: str, **values: Any) -> None:
         with analysis_states_lock:
             current = analysis_states.setdefault(expediente_id, {})
@@ -179,34 +85,6 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 raise ValueError("El cuerpo debe ser un objeto JSON")
             return value
 
-        def _read_selected_files(self) -> tuple[ArchivoSeleccionado, ...]:
-            content_type = self.headers.get("Content-Type", "")
-            if not content_type.casefold().startswith("multipart/form-data"):
-                raise ValueError("La selección debe enviarse como formulario de archivos")
-            length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > max_selection_bytes:
-                raise ValueError(f"La selección debe contener archivos y no superar {max_selection_mb} MB")
-            body = self.rfile.read(length)
-            message = BytesParser(policy=email_policy).parsebytes(
-                f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
-            )
-            files: list[ArchivoSeleccionado] = []
-            names: set[str] = set()
-            for part in message.iter_parts():
-                if part.get_content_disposition() != "form-data" or part.get_filename() is None:
-                    continue
-                selected = create_selected_file(part.get_filename() or "", part.get_payload(decode=True) or b"")
-                folded_name = selected.documento.nombre.casefold()
-                if folded_name in names:
-                    raise ValueError(f"No seleccione dos archivos con el mismo nombre: {selected.documento.nombre}")
-                if not selected.contenido:
-                    raise ValueError(f"El archivo {selected.documento.nombre} está vacío")
-                names.add(folded_name)
-                files.append(selected)
-            if not files:
-                raise ValueError("Seleccione al menos un archivo compatible")
-            return tuple(files)
-
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             if parsed.path == "/":
@@ -222,7 +100,6 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 return
             if parsed.path == "/api/estado":
                 payload = _report_payload(initialize_project(project_root))
-                payload["limites"] = {"tamano_maximo_seleccion_mb": max_selection_mb}
                 self._send_json(HTTPStatus.OK, payload)
                 return
             if parsed.path == "/api/expedientes":
@@ -251,21 +128,28 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 self._send_json(HTTPStatus.OK, {"mensaje": "Servidor GIOJ detenido."})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
-            if self.path == "/api/archivos/seleccion":
+            if self.path == "/api/archivos/seleccion/nativa":
                 try:
-                    files = self._read_selected_files()
-                except (ExpedienteError, TypeError, ValueError) as error:
+                    files = select_files_with_native_dialog()
+                except ExpedienteError as error:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
+                if not files:
+                    self._send_json(HTTPStatus.OK, {
+                        "mensaje": "No se seleccionaron archivos.",
+                        "detalle": "Puede abrir nuevamente el selector nativo de Windows cuando esté listo.",
+                        "seleccion": {"id": "", "documentos": []},
+                    })
+                    return
                 selection_id = f"SEL-{uuid4().hex[:12].upper()}"
-                with selected_files_lock:
-                    selected_files.clear()
-                    selected_files[selection_id] = files
+                with selected_paths_lock:
+                    selected_paths_by_selection.clear()
+                    selected_paths_by_selection[selection_id] = files
                 self._send_json(HTTPStatus.OK, {
                     "mensaje": "Archivos seleccionados.",
                     "detalle": (
-                        f"{len(files)} archivo(s) disponibles solo en memoria. "
-                        "Los originales no fueron copiados ni modificados."
+                        f"{len(files)} archivo(s) referenciados desde su ubicación original. "
+                        "Los originales no fueron copiados ni cargados en memoria."
                     ),
                     "seleccion": {
                         "id": selection_id,
@@ -324,8 +208,13 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 if not isinstance(expediente_id, str) or not expediente_id.strip():
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Seleccione los archivos antes de analizar."})
                     return
-                with selected_files_lock:
-                    memory_files = selected_files.get(expediente_id)
+                with selected_paths_lock:
+                    selected_paths = selected_paths_by_selection.get(expediente_id)
+                if selected_paths is None and expediente_id.startswith("SEL-"):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {
+                        "error": "La selección ya no está activa. Use Seleccionar archivos nuevamente."
+                    })
+                    return
                 update_analysis_state(
                     expediente_id,
                     estado="procesando",
@@ -353,8 +242,8 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
 
                 try:
                     result = (
-                        extract_selected_files_text(project_root, expediente_id, memory_files, report_progress)
-                        if memory_files is not None
+                        extract_selected_paths_text(project_root, expediente_id, selected_paths, report_progress)
+                        if selected_paths is not None
                         else extract_expediente_text(project_root, expediente_id, report_progress)
                     )
                 except OCRExtractionError as error:
@@ -372,7 +261,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     classification = classify_expediente_documents(
                         project_root,
                         expediente_id,
-                        tuple(item.documento for item in memory_files) if memory_files is not None else None,
+                        tuple(item.documento for item in selected_paths) if selected_paths is not None else None,
                     )
                 except ClassificationError as error:
                     update_analysis_state(expediente_id, estado="error", etapa=str(error))

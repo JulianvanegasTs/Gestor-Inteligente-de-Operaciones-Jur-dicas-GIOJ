@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,11 +25,11 @@ class DocumentoExpediente:
 
 
 @dataclass(frozen=True)
-class ArchivoSeleccionado:
-    """Archivo recibido desde la interfaz y mantenido solo en memoria."""
+class ArchivoSeleccionadoRuta:
+    """Referencia temporal a un original elegido con el selector de Windows."""
 
     documento: DocumentoExpediente
-    contenido: bytes
+    ruta_origen: Path
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class Expediente:
 _PDF_EXTENSIONS = {".pdf"}
 _WORD_EXTENSIONS = {".doc", ".docx"}
 _IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
-_MEMORY_EXTENSIONS = _PDF_EXTENSIONS | {".docx"} | _IMAGE_EXTENSIONS
+_SELECTOR_EXTENSIONS = _PDF_EXTENSIONS | {".docx"} | _IMAGE_EXTENSIONS
 
 
 def _categorize(path: Path) -> str:
@@ -58,18 +59,55 @@ def _categorize(path: Path) -> str:
     return "Otro documento"
 
 
-def create_selected_file(filename: str, content: bytes) -> ArchivoSeleccionado:
-    """Valida un archivo del navegador sin crear una copia en el sistema de archivos."""
-    if not isinstance(filename, str) or not filename.strip() or not isinstance(content, bytes):
-        raise ExpedienteError("El archivo seleccionado no es válido")
-    name = Path(filename.strip()).name
-    if name in {"", ".", ".."}:
-        raise ExpedienteError("El nombre del archivo seleccionado no es válido")
-    path = Path(name)
-    document = DocumentoExpediente(name, name, _categorize(path))
-    if path.suffix.casefold() not in _MEMORY_EXTENSIONS:
-        raise ExpedienteError(f"El formato de {name} no es compatible con el análisis")
-    return ArchivoSeleccionado(document, content)
+def create_selected_path(path: str | Path) -> ArchivoSeleccionadoRuta:
+    """Registra una ruta temporal sin leer ni copiar el archivo original.
+
+    La ruta se usa únicamente durante la sesión del servidor. La evidencia y
+    las salidas conservan el nombre del documento, nunca la ruta absoluta.
+    """
+    candidate = Path(path).expanduser()
+    if not candidate.is_file():
+        raise ExpedienteError("El archivo seleccionado ya no existe o no está disponible")
+    resolved = candidate.resolve()
+    if resolved.suffix.casefold() not in _SELECTOR_EXTENSIONS:
+        raise ExpedienteError(f"El formato de {resolved.name} no es compatible con el análisis")
+    document = DocumentoExpediente(resolved.name, resolved.name, _categorize(resolved))
+    return ArchivoSeleccionadoRuta(document, resolved)
+
+
+def select_files_with_native_dialog() -> tuple[ArchivoSeleccionadoRuta, ...]:
+    """Abre el selector múltiple de Windows y mantiene solo rutas temporales."""
+    if platform.system() != "Windows":
+        raise ExpedienteError("El selector nativo de archivos está disponible únicamente en Windows")
+    try:
+        from tkinter import Tk, filedialog
+    except ImportError as error:
+        raise ExpedienteError("No fue posible cargar el selector nativo de Windows") from error
+    try:
+        root = Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        selected_paths = filedialog.askopenfilenames(
+            parent=root,
+            title="Seleccionar documentos para análisis GIOJ",
+            filetypes=[
+                ("Documentos compatibles", "*.pdf *.docx *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp"),
+                ("Todos los archivos", "*.*"),
+            ],
+        )
+    except Exception as error:
+        raise ExpedienteError("No fue posible abrir el selector nativo de Windows") from error
+    finally:
+        if "root" in locals():
+            root.destroy()
+    selected = tuple(create_selected_path(path) for path in selected_paths)
+    names: set[str] = set()
+    for item in selected:
+        folded_name = item.documento.nombre.casefold()
+        if folded_name in names:
+            raise ExpedienteError(f"No seleccione dos archivos con el mismo nombre: {item.documento.nombre}")
+        names.add(folded_name)
+    return selected
 
 
 def _relative_to_project(path: Path, project_root: Path) -> str:
