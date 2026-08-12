@@ -28,6 +28,15 @@ Contiene cada expediente que será analizado.
 Conocimiento/
 Contiene la base documental utilizada por la IA.
 
+Los casos documentales de prueba se almacenan fuera del repositorio en la ruta
+relativa configurada `../GIOJ_PRUEBAS/Casos`. Estos antecedentes no se
+versionan en Git, no son expedientes activos y no reemplazan las reglas de
+`Arquitectura.xlsx`.
+
+La integración de casos permanece desactivada durante el MVP mediante
+`ia.usar_casos` en `Arquitectura/config.json`. La ruta queda registrada para
+pruebas controladas futuras, sin enviar los documentos al repositorio.
+
 Programa/
 Contiene el código fuente del sistema.
 
@@ -263,4 +272,80 @@ Para probarlo, ejecute:
 
 ```powershell
 python -m unittest tests.test_validacion -v
+```
+
+---
+
+# Motor jurídico (GIOJ-009)
+
+El motor vuelve a leer todas las reglas de `04_Reglas_Negocio`, verifica que
+cada una tenga una validación y consolida las alternativas por `Tipo_Regla`.
+Una alternativa coincidente solo habilita la conformidad cuando su `Estado`
+en la arquitectura es `Vigente`. Las coincidencias no vigentes, la ausencia de
+una alternativa coincidente o la falta de información producen `No
+Conformidad`. Las alternativas que no corresponden al expediente se conservan
+como evaluadas, pero no se consideran incumplimientos independientes.
+
+El resultado se guarda en:
+
+```text
+Salida/{id_expediente}/resultado_juridico.json
+```
+
+Para probarlo, ejecute:
+
+```powershell
+python -m unittest tests.test_motor_juridico -v
+```
+
+## Resultados esperados del ciclo
+
+- Todas las filas de `04_Reglas_Negocio` deben quedar evaluadas exactamente una
+  vez.
+- Las alternativas se consolidan por `Tipo_Regla`; una alternativa descartada
+  no se trata como un incumplimiento independiente.
+- Una coincidencia cuyo `Estado` sea `Vigente` permite `Conformidad`, siempre
+  que no exista otra coincidencia no habilitante.
+- Una coincidencia `No_Autorizado`, `Vencido`, `Suspendido` o `Revocado`
+  produce `No Conformidad`.
+- La ausencia de evidencia suficiente produce `No Conformidad` con estado `No
+  existe información`; el sistema no presume conformidad.
+- La salida debe registrar el resultado, las reglas evaluadas, el consolidado
+  por tipo, las observaciones numeradas y el archivo de validaciones utilizado.
+- El resultado es una propuesta trazable para revisión del analista, no una
+  sustitución de su criterio profesional.
+
+## Validación puntual con EXP-001
+
+El expediente de prueba activo `Expedientes/EXP-001` cuenta con una salida de
+validaciones que no aporta evidencia suficiente para seleccionar una regla de
+`Poder_Autorizado`. Al ejecutar el motor, el resultado esperado es:
+
+```text
+Resultado: No Conformidad
+Reglas definidas: 57
+Reglas evaluadas: 57
+Tipo de regla: Poder_Autorizado
+Estado del tipo: No existe información
+Reglas coincidentes: 0
+```
+
+Ejecute desde la raíz del proyecto:
+
+```powershell
+python -c "from pathlib import Path; from Codigo.motor_juridico import apply_legal_engine; resultado = apply_legal_engine(Path('.'), 'EXP-001'); print(resultado.resultado); print(resultado.resumen); print(resultado.resultados_por_tipo)"
+```
+
+Después verifique:
+
+```text
+Salida/EXP-001/resultado_juridico.json
+Logs/motor_juridico.log
+```
+
+La prueba determinista de conformidad vigente, coincidencia no autorizada,
+ambigüedad, falta de información y cobertura de reglas se ejecuta con:
+
+```powershell
+python -m unittest tests.test_motor_juridico -v
 ```

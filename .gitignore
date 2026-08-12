@@ -36,6 +36,9 @@ Thumbs.db
 
 Expedientes/**/03_Resultados/
 
+# Los casos jurídicos sensibles se almacenan fuera del repositorio.
+Conocimiento/Casos/
+
 # -------------------------------
 # Archivos de trabajo
 # -------------------------------

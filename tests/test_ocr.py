@@ -15,6 +15,7 @@ from Codigo.config import load_configuration
 from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.extraccion import ResultadoExtraccion
 from Codigo.expediente import DocumentoExpediente
+from Codigo.motor_juridico import ResultadoMotorJuridico, ResumenMotorJuridico
 from Codigo.normalizacion import ResultadoNormalizacion, ResumenNormalizacion
 from Codigo.ocr import OCRExtractionError, TextoExtraido, _extract_pdf, _run_tesseract, extract_expediente_text
 from Codigo.validacion import ResultadoValidaciones, ResumenValidacion
@@ -63,6 +64,7 @@ class OCRTests(unittest.TestCase):
                 patch("Codigo.web.extract_expediente_data", return_value=ResultadoExtraccion("EXP-WEB", (), (), "Salida/EXP-WEB/extraccion_documental.json")),
                 patch("Codigo.web.normalize_expediente_data", return_value=ResultadoNormalizacion("EXP-WEB", (), (), "Salida/EXP-WEB/normalizacion_documental.json", ResumenNormalizacion(0, 0, 0, ()))),
                 patch("Codigo.web.validate_expediente_data", return_value=ResultadoValidaciones("EXP-WEB", (), "Salida/EXP-WEB/validaciones_documentales.json", ResumenValidacion(0, 0, 0, 0, 0, 0))),
+                patch("Codigo.web.apply_legal_engine", return_value=ResultadoMotorJuridico("EXP-WEB", "Conformidad", (), (), (), "Salida/EXP-WEB/resultado_juridico.json", ResumenMotorJuridico(0, 0, 0, 0, 0, 0, 0))),
             ):
                 with urlopen(request) as response:
                     payload = json.loads(response.read().decode("utf-8"))
@@ -74,13 +76,15 @@ class OCRTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-        self.assertEqual(payload["mensaje"], "Expediente extraído, clasificado, normalizado y validado.")
+        self.assertEqual(payload["mensaje"], "Resultado jurídico: Conformidad.")
         self.assertEqual(payload["ocr"]["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
         self.assertIn("Clasificación: Salida/EXP-WEB/clasificacion_documental.json", payload["detalle"])
         self.assertEqual(payload["clasificacion"]["archivo_salida"], "Salida/EXP-WEB/clasificacion_documental.json")
         self.assertEqual(payload["extraccion"]["archivo_salida"], "Salida/EXP-WEB/extraccion_documental.json")
         self.assertEqual(payload["normalizacion"]["archivo_salida"], "Salida/EXP-WEB/normalizacion_documental.json")
         self.assertEqual(payload["validacion"]["archivo_salida"], "Salida/EXP-WEB/validaciones_documentales.json")
+        self.assertEqual(payload["motor_juridico"]["archivo_salida"], "Salida/EXP-WEB/resultado_juridico.json")
+        self.assertEqual(payload["motor_juridico"]["resultado"], "Conformidad")
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
         self.assertEqual(output["textos"][0]["pagina"], 1)
@@ -93,6 +97,8 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(progress["archivo_extraccion"], "Salida/EXP-WEB/extraccion_documental.json")
         self.assertEqual(progress["archivo_normalizacion"], "Salida/EXP-WEB/normalizacion_documental.json")
         self.assertEqual(progress["archivo_validaciones"], "Salida/EXP-WEB/validaciones_documentales.json")
+        self.assertEqual(progress["archivo_resultado_juridico"], "Salida/EXP-WEB/resultado_juridico.json")
+        self.assertEqual(progress["resultado_juridico"], "Conformidad")
         self.assertEqual(progress["completadas"], 1)
         self.assertEqual(progress["total"], 1)
 

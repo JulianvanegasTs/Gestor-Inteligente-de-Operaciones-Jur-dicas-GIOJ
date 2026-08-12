@@ -72,7 +72,7 @@ def _cell(row: dict[str, str], name: str) -> str:
     return row.get(name, "").strip()
 
 
-def _rules(configuration: ProjectConfiguration) -> tuple[ReglaNegocio, ...]:
+def load_business_rules(configuration: ProjectConfiguration) -> tuple[ReglaNegocio, ...]:
     """Lee todas las filas identificadas de la hoja configurada de reglas."""
     try:
         sheet_name = str(configuration.values["hojas"]["reglas"])
@@ -244,7 +244,7 @@ def validate_expediente_data(project_root: Path, expediente_id: str) -> Resultad
         configuration = load_configuration(project_root)
     except ConfigurationError as error:
         raise ValidationError(str(error)) from error
-    rules = _rules(configuration)
+    rules = load_business_rules(configuration)
     values = _field_values(_load_extraction(configuration, expediente_id))
     validations = tuple(_validate(rule, values) for rule in rules)
     summary = ResumenValidacion(len(rules), len(validations), sum(item.estado == "Cumple" for item in validations), sum(item.estado == "No cumple" for item in validations), sum(item.estado == "No existe información" for item in validations), sum(item.estado == "No aplica" for item in validations))

@@ -28,16 +28,17 @@ Configuracion/
 
 Catálogos auxiliares.
 
-Casos/
+Casos externos
 
-Contiene casos históricos validados como referencia para la generación de
-conceptos. Los documentos que aún no se han estructurado se conservan en
-`Casos/Pendientes_Estructuracion/`; los casos revisados se almacenan en
-`Casos/Validados/` con su JSON trazable.
+Los casos históricos y de prueba no se almacenan dentro de `Conocimiento/` ni
+se versionan en Git. Su ubicación relativa configurada es
+`../GIOJ_PRUEBAS/Casos`.
 
-La organización no agrega reglas jurídicas ni modifica las validaciones
-vigentes. Cada observación histórica requiere revisión humana antes de que
-pueda proponerse como cambio a la arquitectura oficial.
+Cada caso externo conserva `01_Documentos`, `02_Datos_estructurados` y
+`03_Resultados`. Durante el MVP su consumo permanece desactivado. La
+organización externa no agrega reglas jurídicas ni modifica las validaciones
+vigentes; cualquier observación histórica requiere revisión humana antes de
+proponerse como cambio a la arquitectura oficial.
 
 ---
 

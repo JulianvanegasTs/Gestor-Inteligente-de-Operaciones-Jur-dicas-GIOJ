@@ -77,6 +77,10 @@
     "archivo_salida": "validaciones_documentales.json"
   },
 
+  "motor_juridico": {
+    "archivo_salida": "resultado_juridico.json"
+  },
+
   "analisis": {
     "comparacion_textual": true,
     "normalizar_texto": true,
@@ -112,7 +116,8 @@
     "usar_conocimiento_local": true,
     "carpeta": "./Conocimiento/",
     "usar_analisis_historicos": true,
-    "usar_casos": true,
+    "usar_casos": false,
+    "carpeta_casos": "../GIOJ_PRUEBAS/Casos",
     "usar_normatividad": true,
     "usar_jurisprudencia": true,
     "usar_modelos": true,

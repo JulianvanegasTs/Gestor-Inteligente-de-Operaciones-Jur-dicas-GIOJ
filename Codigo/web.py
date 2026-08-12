@@ -15,6 +15,7 @@ from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
 from .extraccion import ExtractionError, extract_expediente_data
 from .expediente import ExpedienteError, find_expediente_id, read_expediente
+from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text
 from .validacion import ValidationError, validate_expediente_data
@@ -306,8 +307,21 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     return
                 update_analysis_state(
                     expediente_id,
+                    estado="procesando",
+                    etapa="Aplicando motor jurídico",
+                    documento=None,
+                    pagina=None,
+                )
+                try:
+                    legal_result = apply_legal_engine(project_root, expediente_id)
+                except LegalEngineError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                update_analysis_state(
+                    expediente_id,
                     estado="completado",
-                    etapa="Extracción, clasificación, normalización y validaciones completadas",
+                    etapa="Análisis y motor jurídico completados",
                     documento=None,
                     pagina=None,
                     archivo_salida=result.archivo_salida,
@@ -315,16 +329,19 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     archivo_extraccion=extraction.archivo_salida,
                     archivo_normalizacion=normalization.archivo_salida,
                     archivo_validaciones=validation.archivo_salida,
+                    archivo_resultado_juridico=legal_result.archivo_salida,
+                    resultado_juridico=legal_result.resultado,
                     errores=len(result.errores),
                 )
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": "Expediente extraído, clasificado, normalizado y validado.",
+                    "mensaje": f"Resultado jurídico: {legal_result.resultado}.",
                     "detalle": (
                         f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
                         f"Clasificación: {classification.archivo_salida}. "
                         f"Extracción: {extraction.archivo_salida}. "
                         f"Normalización: {normalization.archivo_salida}. "
-                        f"Validaciones: {validation.archivo_salida}"
+                        f"Validaciones: {validation.archivo_salida}. "
+                        f"Motor jurídico: {legal_result.archivo_salida}"
                     ),
                     "ocr": {
                         "archivo_salida": result.archivo_salida,
@@ -361,6 +378,12 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     "validacion": {
                         "archivo_salida": validation.archivo_salida,
                         "resumen": asdict(validation.resumen),
+                    },
+                    "motor_juridico": {
+                        "archivo_salida": legal_result.archivo_salida,
+                        "resultado": legal_result.resultado,
+                        "resumen": asdict(legal_result.resumen),
+                        "observaciones": [asdict(item) for item in legal_result.observaciones],
                     },
                 })
                 return
