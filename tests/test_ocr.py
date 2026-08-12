@@ -110,6 +110,12 @@ class OCRTests(unittest.TestCase):
         self.assertIn('id="progress-percent"', interface)
         self.assertIn('id="progress-remaining"', interface)
         self.assertIn("Restante estimado", interface)
+        self.assertIn('id="validation-details"', interface)
+        self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
+        self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)
+        self.assertIn("Documento comparado", interface)
+        self.assertIn("Valor esperado", interface)
+        self.assertIn("Valor encontrado", interface)
 
     def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
         tsv = (

@@ -378,10 +378,12 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     "validacion": {
                         "archivo_salida": validation.archivo_salida,
                         "resumen": asdict(validation.resumen),
+                        "reglas": [asdict(item) for item in validation.validaciones],
                     },
                     "motor_juridico": {
                         "archivo_salida": legal_result.archivo_salida,
                         "resultado": legal_result.resultado,
+                        "concepto_juridico": legal_result.concepto_juridico,
                         "resumen": asdict(legal_result.resumen),
                         "observaciones": [asdict(item) for item in legal_result.observaciones],
                     },

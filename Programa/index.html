@@ -300,6 +300,47 @@
             background: #dc2626;
         }
 
+        .validation-details {
+            display: grid;
+            gap: 14px;
+            max-height: 430px;
+            overflow: auto;
+        }
+
+        .validation-table-wrap {
+            overflow-x: auto;
+            border: 1px solid #dbe4f0;
+            border-radius: 10px;
+        }
+
+        .validation-table-title {
+            margin: 0;
+            padding: 10px 12px;
+            color: #1e3a5f;
+            background: #eff6ff;
+            font-size: 0.85rem;
+        }
+
+        .validation-table {
+            width: 100%;
+            min-width: 920px;
+            border-collapse: collapse;
+            font-size: 0.72rem;
+        }
+
+        .validation-table th,
+        .validation-table td {
+            padding: 8px;
+            border-top: 1px solid #e2e8f0;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .validation-table th {
+            color: #334155;
+            background: #f8fafc;
+        }
+
         .placeholder-line {
             height: 10px;
             background-color: #cbd5e1;
@@ -417,6 +458,8 @@
                 <div class="placeholder-line w-60"></div>
             </div>
 
+            <div class="validation-details" id="validation-details" hidden></div>
+
             <div class="analysis-progress" id="analysis-progress" hidden aria-live="polite">
                 <div class="analysis-progress-header">
                     <span class="analysis-progress-stage" id="progress-stage">Preparando el expediente</span>
@@ -462,6 +505,7 @@
         const actionHint = document.querySelector('.action-hint');
         const outputSummary = document.getElementById('output-summary');
         const outputInfo = document.getElementById('output-info');
+        const validationDetails = document.getElementById('validation-details');
         const progressContainer = document.getElementById('analysis-progress');
         const progressStage = document.getElementById('progress-stage');
         const progressPercent = document.getElementById('progress-percent');
@@ -490,6 +534,85 @@
 
         const showMessage = (target, message) => {
             target.textContent = message;
+        };
+
+        const renderValidationTable = (title, columns, rows) => {
+            const wrap = window.document.createElement('section');
+            wrap.className = 'validation-table-wrap';
+            const heading = window.document.createElement('h3');
+            heading.className = 'validation-table-title';
+            heading.textContent = title;
+            const table = window.document.createElement('table');
+            table.className = 'validation-table';
+            const header = window.document.createElement('tr');
+            for (const column of columns) {
+                const cell = window.document.createElement('th');
+                cell.textContent = column.label;
+                header.appendChild(cell);
+            }
+            const head = window.document.createElement('thead');
+            head.appendChild(header);
+            table.appendChild(head);
+            const body = window.document.createElement('tbody');
+            for (const row of rows) {
+                const line = window.document.createElement('tr');
+                for (const column of columns) {
+                    const cell = window.document.createElement('td');
+                    cell.textContent = String(row[column.key] ?? 'No disponible');
+                    line.appendChild(cell);
+                }
+                body.appendChild(line);
+            }
+            table.appendChild(body);
+            wrap.append(heading, table);
+            return wrap;
+        };
+
+        const renderAnalysisResults = result => {
+            const rules = Array.isArray(result.validacion?.reglas) ? result.validacion.reglas : [];
+            const flatten = rule => (Array.isArray(rule.comparaciones) && rule.comparaciones.length
+                ? rule.comparaciones
+                : [{}]).map(comparison => ({
+                    regla: rule.id_regla,
+                    documento_validado: comparison.documento_validado,
+                    pagina_validada: comparison.pagina_validada,
+                    documento_comparado: comparison.documento_comparado,
+                    pagina_comparada: comparison.pagina_comparada ?? comparison.referencia_comparada,
+                    valor_esperado: comparison.valor_esperado,
+                    valor_encontrado: Array.isArray(comparison.valor_encontrado)
+                        ? comparison.valor_encontrado.join(' | ')
+                        : comparison.valor_encontrado,
+                    estado: comparison.estado_interfaz || (rule.estado === 'Cumple' ? 'Validado' : 'No validado')
+                }));
+            const minuteFindings = rules
+                .filter(rule => rule.tipo_regla === 'Formato_Minuta' && !['Cumple', 'No aplica'].includes(rule.estado))
+                .flatMap(flatten);
+            const mandatoryFields = rules.filter(rule => rule.tipo_regla === 'Campo_Obligatorio').flatMap(flatten);
+            const powers = rules.filter(rule => rule.tipo_regla === 'Poder_Autorizado').flatMap(flatten);
+            validationDetails.replaceChildren();
+            const minuteColumns = [
+                {key: 'regla', label: 'Regla / cláusula'},
+                {key: 'documento_validado', label: 'Documento validado'},
+                {key: 'pagina_validada', label: 'Página'},
+                {key: 'valor_esperado', label: 'Valor esperado'},
+                {key: 'valor_encontrado', label: 'Valor encontrado'}
+            ];
+            const fieldColumns = [
+                {key: 'regla', label: 'Campo'},
+                {key: 'documento_validado', label: 'Documento validado'},
+                {key: 'pagina_validada', label: 'Página'},
+                {key: 'documento_comparado', label: 'Documento comparado'},
+                {key: 'pagina_comparada', label: 'Página / sección'},
+                {key: 'valor_esperado', label: 'Valor esperado'},
+                {key: 'valor_encontrado', label: 'Valor encontrado'},
+                {key: 'estado', label: 'Estado'}
+            ];
+            validationDetails.append(
+                renderValidationTable('Diferencias frente a Minuta_hipoteca', minuteColumns, minuteFindings),
+                renderValidationTable('Datos obligatorios de 01_Campos_Extraccion', fieldColumns, mandatoryFields),
+                renderValidationTable('Validación de poderes', fieldColumns, powers)
+            );
+            validationDetails.hidden = false;
         };
 
         const renderDocuments = (documents) => {
@@ -611,8 +734,9 @@
                 if (result.error) {
                     throw new Error(result.error);
                 }
-                showMessage(outputSummary, result.mensaje);
+                showMessage(outputSummary, result.motor_juridico?.concepto_juridico || result.mensaje);
                 showMessage(outputInfo, result.detalle);
+                renderAnalysisResults(result);
                 progressFill.style.width = '100%';
                 progressPercent.textContent = '100%';
                 progressTrack.setAttribute('aria-valuenow', '100');

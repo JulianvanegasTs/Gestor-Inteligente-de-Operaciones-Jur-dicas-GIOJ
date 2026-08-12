@@ -256,11 +256,22 @@ python -m unittest tests.test_normalizacion -v
 
 # Validaciones documentales (GIOJ-008)
 
-El motor lee todas las filas activas de `04_Reglas_Negocio` y compara los
-criterios cuyos campos fueron extraídos del expediente. Cada resultado incluye
-la regla aplicada, el valor esperado, el valor encontrado, el documento y la
-página de evidencia. Los estados posibles son `Cumple`, `No cumple`, `No
-existe información` y `No aplica`.
+`04_Reglas_Negocio` contiene controles ejecutables y no registros de
+conocimiento. El motor identifica exactamente una `Escritura_Firma`, valida
+los 39 datos obligatorios de `01_Campos_Extraccion`, compara las cláusulas
+fijas contra `Conocimiento/Minutas/Minuta_hipoteca.docx`, verifica los poderes
+contra `Conocimiento/Poderes/Poderes_ecopetrol_2026.xlsx` y ejecuta controles
+de calidad documental.
+
+Cada comparación conserva `Documento_Validado`, `Pagina_Validada`,
+`Documento_Comparado`, `Pagina_Comparada`, `Valor_Esperado`,
+`Valor_Encontrado` y `Estado_Interfaz`. Los estados internos permitidos son
+`Cumple`, `No cumple`, `No existe información` y `No aplica`; la interfaz los
+presenta como `Validado` o `No validado`.
+
+La minuta mantiene intacto el clausulado definido por Ecopetrol. Sus anclas
+internas `MIN_*` no son visibles en Word y permiten localizar cada diferencia
+sin insertar identificadores en el texto jurídico.
 
 El resultado se guarda en:
 
@@ -279,12 +290,11 @@ python -m unittest tests.test_validacion -v
 # Motor jurídico (GIOJ-009)
 
 El motor vuelve a leer todas las reglas de `04_Reglas_Negocio`, verifica que
-cada una tenga una validación y consolida las alternativas por `Tipo_Regla`.
-Una alternativa coincidente solo habilita la conformidad cuando su `Estado`
-en la arquitectura es `Vigente`. Las coincidencias no vigentes, la ausencia de
-una alternativa coincidente o la falta de información producen `No
-Conformidad`. Las alternativas que no corresponden al expediente se conservan
-como evaluadas, pero no se consideran incumplimientos independientes.
+cada una tenga una validación y consolida los controles por `Tipo_Regla`. En
+los grupos estructurados todos los controles aplicables deben quedar
+validados; cualquier incumplimiento o ausencia de evidencia produce `No
+Conformidad`. El resultado incluye un `concepto_juridico` resumido y trazable
+para revisión profesional.
 
 El resultado se guarda en:
 
@@ -315,36 +325,15 @@ python -m unittest tests.test_motor_juridico -v
 - El resultado es una propuesta trazable para revisión del analista, no una
   sustitución de su criterio profesional.
 
-## Validación puntual con EXP-001
+## Casos de regresión
 
-El expediente de prueba activo `Expedientes/EXP-001` cuenta con una salida de
-validaciones que no aporta evidencia suficiente para seleccionar una regla de
-`Poder_Autorizado`. Al ejecutar el motor, el resultado esperado es:
+La hoja `06_Casos_Prueba` documenta los diez expedientes revisados en la ruta
+relativa configurada `../GIOJ_PRUEBAS/Casos`. Incluye los casos críticos de campos vacíos,
+instrucciones internas, bloques duplicados, equivalencias de cuantía, orden de
+secciones y cadenas de poderes. La ejecución de desarrollo debe usar copias en
+`Expedientes/Pruebas/`; los resultados se guardan en `Salida/{id_expediente}`.
 
-```text
-Resultado: No Conformidad
-Reglas definidas: 57
-Reglas evaluadas: 57
-Tipo de regla: Poder_Autorizado
-Estado del tipo: No existe información
-Reglas coincidentes: 0
-```
-
-Ejecute desde la raíz del proyecto:
-
-```powershell
-python -c "from pathlib import Path; from Codigo.motor_juridico import apply_legal_engine; resultado = apply_legal_engine(Path('.'), 'EXP-001'); print(resultado.resultado); print(resultado.resumen); print(resultado.resultados_por_tipo)"
-```
-
-Después verifique:
-
-```text
-Salida/EXP-001/resultado_juridico.json
-Logs/motor_juridico.log
-```
-
-La prueba determinista de conformidad vigente, coincidencia no autorizada,
-ambigüedad, falta de información y cobertura de reglas se ejecuta con:
+Las pruebas deterministas de validación y consolidación se ejecutan con:
 
 ```powershell
 python -m unittest tests.test_motor_juridico -v

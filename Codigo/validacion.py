@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 from .clasificacion import _normalizar, _read_shared_strings, _read_sheet, _worksheet_paths
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
@@ -38,6 +39,12 @@ class ComparacionValidacion:
     documento_destino: str
     estado: str
     observacion: str
+    documento_validado: str = ""
+    pagina_validada: int | None = None
+    documento_comparado: str = ""
+    pagina_comparada: int | None = None
+    referencia_comparada: str = ""
+    estado_interfaz: str = "No validado"
 
 
 @dataclass(frozen=True)
@@ -215,7 +222,367 @@ def _comparison(column: str, expected: str, values: list[dict[str, Any]]) -> Com
     return ComparacionValidacion(column, expected, found, documents, pages, "04_Reglas_Negocio", "No cumple", "El valor encontrado no coincide con el criterio de la regla.")
 
 
-def _validate(rule: ReglaNegocio, values: dict[str, list[dict[str, Any]]]) -> ResultadoValidacion:
+def _criterion(rule: ReglaNegocio, name: str, default: str = "") -> str:
+    normalized = _normalizar(name)
+    return next((value for column, value in rule.criterios.items() if _normalizar(column) == normalized), default)
+
+
+def _load_result(configuration: ProjectConfiguration, expediente_id: str, filename: str) -> dict[str, Any]:
+    source = configuration.route("salida") / expediente_id / filename
+    if not source.is_file():
+        return {}
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) and payload.get("id_expediente") == expediente_id else {}
+
+
+def _classification_index(payload: dict[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in payload.get("documentos", []):
+        if not isinstance(item, dict) or not isinstance(item.get("documento"), str):
+            continue
+        document_type = item.get("tipo_documental") or item.get("codigo_tipo_documental") or ""
+        result[item["documento"]] = str(document_type)
+    return result
+
+
+def _documents_of_type(classifications: dict[str, str], document_type: str) -> tuple[str, ...]:
+    wanted = _normalizar(document_type)
+    return tuple(document for document, current in classifications.items() if _normalizar(current) == wanted)
+
+
+def _ocr_pages(payload: dict[str, Any], documents: tuple[str, ...]) -> list[dict[str, Any]]:
+    selected = set(documents)
+    return [
+        item for item in payload.get("textos", [])
+        if isinstance(item, dict) and item.get("documento") in selected and isinstance(item.get("texto"), str)
+    ]
+
+
+def _all_field_entries(values: dict[str, list[dict[str, Any]]], field_id: str) -> list[dict[str, Any]]:
+    return values.get(_normalizar(field_id), [])
+
+
+def _matching_page(expected: str, pages: list[dict[str, Any]]) -> tuple[int | None, str]:
+    normalized_expected = _normalizar(expected)
+    if not normalized_expected:
+        return None, ""
+    expected_tokens = normalized_expected.split()
+    best: tuple[float, int | None, str] = (0.0, None, "")
+    for item in pages:
+        text = str(item.get("texto", ""))
+        normalized_text = _normalizar(text)
+        if normalized_expected in normalized_text:
+            return int(item.get("pagina", 0) or 0), text[:1200]
+        text_tokens = set(normalized_text.split())
+        score = sum(token in text_tokens for token in set(expected_tokens)) / max(1, len(set(expected_tokens)))
+        if score > best[0]:
+            best = (score, int(item.get("pagina", 0) or 0), text[:1200])
+    return (best[1], best[2]) if best[0] >= 0.45 else (None, "")
+
+
+def _interface_state(state: str) -> str:
+    return "Validado" if state == "Cumple" else "No validado"
+
+
+def _trace_comparison(
+    field: str,
+    expected: str,
+    found: str,
+    validated_document: str,
+    validated_page: int | None,
+    compared_document: str,
+    compared_page: int | None,
+    state: str,
+    observation: str,
+    reference: str = "",
+) -> ComparacionValidacion:
+    return ComparacionValidacion(
+        field,
+        expected,
+        (found,) if found else (),
+        (validated_document,) if validated_document else (),
+        (validated_page,) if validated_page else (),
+        compared_document,
+        state,
+        observation,
+        validated_document,
+        validated_page,
+        compared_document,
+        compared_page,
+        reference,
+        _interface_state(state),
+    )
+
+
+def _condition_applies(rule: ReglaNegocio, values: dict[str, list[dict[str, Any]]]) -> bool:
+    condition = _criterion(rule, "Aplica_Si", "Siempre").strip()
+    if not condition or _normalizar(condition) == "siempre":
+        return True
+    if "=" not in condition:
+        return True
+    field_id, expected = (part.strip() for part in condition.split("=", 1))
+    entries = _all_field_entries(values, field_id)
+    return any(_equal(expected, str(entry.get("valor", ""))) for entry in entries)
+
+
+def _not_applicable(rule: ReglaNegocio) -> ResultadoValidacion:
+    return ResultadoValidacion(
+        rule.id_regla,
+        rule.tipo_regla,
+        rule.fuente_regla,
+        "No aplica",
+        (),
+        f"La condición {_criterion(rule, 'Aplica_Si')} no se cumple para este expediente.",
+    )
+
+
+def _validate_unique_document(rule: ReglaNegocio, classifications: dict[str, str]) -> ResultadoValidacion:
+    document_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
+    documents = _documents_of_type(classifications, document_type)
+    state = "Cumple" if len(documents) == 1 else "No cumple" if documents else "No existe información"
+    found = ", ".join(documents) or "No identificado"
+    comparison = _trace_comparison(
+        "Documento",
+        f"Exactamente un {document_type}",
+        found,
+        found if len(documents) == 1 else "",
+        None,
+        "Clasificacion_Documental",
+        None,
+        state,
+        f"Se identificaron {len(documents)} documentos del tipo {document_type}.",
+    )
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), comparison.observacion)
+
+
+def _validate_mandatory_field(
+    rule: ReglaNegocio,
+    values: dict[str, list[dict[str, Any]]],
+    classifications: dict[str, str],
+    ocr: dict[str, Any],
+) -> ResultadoValidacion:
+    field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
+    escritura_documents = _documents_of_type(classifications, _criterion(rule, "Documento_Validado", "Escritura_Firma"))
+    pages = _ocr_pages(ocr, escritura_documents)
+    entries = _all_field_entries(values, field_id)
+    source_types = tuple(part for part in _criterion(rule, "Documento_Comparado").split("|") if part)
+    expected_entries = [
+        entry for entry in entries
+        if any(_normalizar(classifications.get(str(entry.get("documento", "")), "")) == _normalizar(source) for source in source_types)
+    ]
+    if not expected_entries:
+        expected_entries = [entry for entry in entries if entry.get("documento") not in escritura_documents]
+    escritura_entries = [entry for entry in entries if entry.get("documento") in escritura_documents]
+    expected_entry = expected_entries[0] if expected_entries else (entries[0] if entries else None)
+    expected = str(expected_entry.get("valor", "")) if expected_entry else "Dato obligatorio"
+    compared_document = str(expected_entry.get("documento", "")) if expected_entry else " | ".join(source_types)
+    compared_page = expected_entry.get("pagina") if expected_entry else None
+    found_entry = next((entry for entry in escritura_entries if _equal(expected, str(entry.get("valor", "")))), None)
+    if found_entry:
+        validated_page = found_entry.get("pagina")
+        found = str(found_entry.get("valor", ""))
+    else:
+        validated_page, found = _matching_page(expected, pages) if expected_entry else (None, "")
+    if expected_entry and validated_page:
+        state = "Cumple"
+        observation = "El dato obligatorio fue localizado en Escritura_Firma y conserva trazabilidad contra el documento fuente."
+    elif expected_entry:
+        state = "No cumple"
+        observation = "El dato esperado del documento fuente no fue localizado en Escritura_Firma."
+    else:
+        state = "No existe información"
+        observation = "No existe un valor fuente trazable para validar el dato obligatorio."
+    comparison = _trace_comparison(
+        field_id,
+        expected,
+        found,
+        escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
+        validated_page,
+        compared_document,
+        int(compared_page) if isinstance(compared_page, (int, float)) else None,
+        state,
+        observation,
+    )
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _bookmark_text(document_path: Path, bookmark: str) -> str:
+    namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    try:
+        with zipfile.ZipFile(document_path) as package:
+            root = ElementTree.fromstring(package.read("word/document.xml"))
+    except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as error:
+        raise ValidationError(f"No fue posible leer la minuta de conocimiento: {error}") from error
+    for paragraph in root.findall(".//w:p", namespace):
+        names = {item.attrib.get(f"{{{namespace['w']}}}name") for item in paragraph.findall("w:bookmarkStart", namespace)}
+        if bookmark in names:
+            return "".join(paragraph.itertext()).strip()
+    return ""
+
+
+def _fixed_minute_text(value: str) -> str:
+    return re.sub(r"\{\{[^{}]+\}\}", " ", value)
+
+
+def _clause_score(expected: str, text: str) -> float:
+    expected_tokens = _normalizar(_fixed_minute_text(expected)).split()
+    found_tokens = _normalizar(text).split()
+    if not expected_tokens or not found_tokens:
+        return 0.0
+    shingles = {tuple(expected_tokens[index:index + 4]) for index in range(max(1, len(expected_tokens) - 3))}
+    found = {tuple(found_tokens[index:index + 4]) for index in range(max(1, len(found_tokens) - 3))}
+    return len(shingles & found) / max(1, len(shingles))
+
+
+def _validate_clause(
+    rule: ReglaNegocio,
+    configuration: ProjectConfiguration,
+    classifications: dict[str, str],
+    ocr: dict[str, Any],
+) -> ResultadoValidacion:
+    bookmark_reference = _criterion(rule, "Fuente_Valor_Esperado")
+    bookmark = bookmark_reference.split(":", 1)[1] if ":" in bookmark_reference else bookmark_reference
+    minute_file = configuration.route("conocimiento") / str(configuration.values.get("conocimiento", {}).get("minuta_hipoteca", "Minutas/Minuta_hipoteca.docx"))
+    expected = _bookmark_text(minute_file, bookmark)
+    escritura_documents = _documents_of_type(classifications, "Escritura_Firma")
+    pages = _ocr_pages(ocr, escritura_documents)
+    equivalences = configuration.values.get("analisis", {}).get("equivalencias_juridicas", {})
+    def comparable_text(text: str) -> str:
+        if not isinstance(equivalences, dict):
+            return text
+        result = text
+        for canonical, alternatives in equivalences.items():
+            if not isinstance(alternatives, list):
+                continue
+            for alternative in alternatives:
+                result = re.sub(re.escape(str(alternative)), str(canonical), result, flags=re.IGNORECASE)
+        return result
+    best = max(((_clause_score(expected, comparable_text(str(item.get("texto", "")))), item) for item in pages), default=(0.0, {}), key=lambda pair: pair[0])
+    score, page = best
+    threshold = float(configuration.values.get("analisis", {}).get("umbral_coincidencia_clausula", 0.58))
+    state = "Cumple" if expected and score >= threshold else "No cumple" if expected and pages else "No existe información"
+    observation = (
+        f"Coincidencia estructural de {score:.0%} con la sección {bookmark}."
+        if expected and pages else "No existe texto suficiente para comparar la cláusula."
+    )
+    comparison = _trace_comparison(
+        _criterion(rule, "ID_Campo_Clausula", rule.id_regla),
+        expected[:1600],
+        str(page.get("texto", ""))[:1600],
+        escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
+        int(page.get("pagina", 0) or 0) or None,
+        "Minuta_hipoteca.docx",
+        None,
+        state,
+        observation,
+        bookmark,
+    )
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _read_power_catalog(configuration: ProjectConfiguration) -> list[dict[str, str]]:
+    relative = str(configuration.values.get("conocimiento", {}).get("poderes_ecopetrol", "Poderes/Poderes_ecopetrol_2026.xlsx"))
+    source = configuration.route("conocimiento") / relative
+    try:
+        with zipfile.ZipFile(source) as workbook:
+            paths = _worksheet_paths(workbook)
+            first = next(iter(paths.values()))
+            return _read_sheet(workbook, first, _read_shared_strings(workbook))
+    except (OSError, StopIteration, ValueError, zipfile.BadZipFile) as error:
+        raise ValidationError(f"No fue posible leer el catálogo de poderes: {error}") from error
+
+
+def _validate_power(
+    rule: ReglaNegocio,
+    configuration: ProjectConfiguration,
+    classifications: dict[str, str],
+    ocr: dict[str, Any],
+) -> ResultadoValidacion:
+    catalog = _read_power_catalog(configuration)
+    escritura_documents = _documents_of_type(classifications, "Escritura_Firma")
+    pages = _ocr_pages(ocr, escritura_documents)
+    full_text = "\n".join(str(item.get("texto", "")) for item in pages)
+    reference = _criterion(rule, "Fuente_Valor_Esperado")
+    candidates = [row for row in catalog if _normalizar(row.get("Estado", "")) == "vigente"]
+    if reference.startswith("POD-R"):
+        candidates = [row for row in candidates if row.get("ID_Regla") == reference]
+    else:
+        candidates = [row for row in candidates if row.get("Tipo_Regla") != "Poder_Matriz"]
+    required_columns = ("Numero_Poder", "Fecha_Poder", "Notaria", "Ciudad_Notaria")
+    matched = next(
+        (row for row in candidates if all(not row.get(column) or _normalizar(row[column]) in _normalizar(full_text) for column in required_columns)),
+        None,
+    )
+    state = "Cumple" if matched else "No cumple" if pages else "No existe información"
+    expected = "; ".join(
+        f"{column}={matched.get(column, '')}" for column in ("Apoderado", "Numero_Documento", *required_columns)
+    ) if matched else f"Registro vigente del catálogo ({reference})"
+    page_number, found = _matching_page(str((matched or {}).get("Numero_Poder", "")), pages) if matched else (None, full_text[:1200])
+    observation = "La cadena de poder coincide con un registro vigente del catálogo local." if matched else "No se encontró una coincidencia completa y vigente en el catálogo local de poderes."
+    comparison = _trace_comparison(rule.id_regla, expected, found, escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma", page_number, "Poderes_ecopetrol_2026.xlsx", None, state, observation, (matched or {}).get("ID_Regla", reference))
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _validate_quality(rule: ReglaNegocio, classifications: dict[str, str], ocr: dict[str, Any]) -> ResultadoValidacion:
+    documents = _documents_of_type(classifications, "Escritura_Firma")
+    pages = _ocr_pages(ocr, documents)
+    comparison_type = _criterion(rule, "Tipo_Comparacion")
+    patterns = {
+        "Sin_Marcadores": r"\{\{[^{}]+\}\}|_{4,}|\bxxx+\b",
+        "Sin_Instrucciones": r"incluir unicamente|sin formato|validar informacion|representante de cavipetrol que firmara|hasta aca la minuta",
+    }
+    findings: list[tuple[dict[str, Any], str]] = []
+    if comparison_type in patterns:
+        expression = re.compile(patterns[comparison_type], re.IGNORECASE)
+        for page in pages:
+            match = expression.search(_normalizar(str(page.get("texto", ""))) if comparison_type == "Sin_Instrucciones" else str(page.get("texto", "")))
+            if match:
+                findings.append((page, match.group(0)))
+    elif comparison_type == "Sin_Duplicados":
+        anchors = ("acto seguido comparece", "registrada ante cavipetrol")
+        normalized = _normalizar("\n".join(str(item.get("texto", "")) for item in pages))
+        duplicate = next((anchor for anchor in anchors if normalized.count(anchor) > 1), "")
+        if duplicate:
+            findings.append((pages[0] if pages else {}, duplicate))
+    elif comparison_type == "Orden_Secciones":
+        normalized = _normalizar("\n".join(str(item.get("texto", "")) for item in pages))
+        positions = [normalized.find(_normalizar(label)) for label in ("primera constitucion", "segunda objeto", "tercera cuantia", "cuarta tradicion")]
+        if any(position < 0 for position in positions) or positions != sorted(positions):
+            findings.append((pages[0] if pages else {}, "orden de cláusulas"))
+    state = "No cumple" if findings else "Cumple" if pages else "No existe información"
+    page = findings[0][0] if findings else (pages[0] if pages else {})
+    found = findings[0][1] if findings else "Sin hallazgos"
+    observation = "Se encontró contenido que incumple el control de calidad." if findings else "No se encontraron hallazgos para este control de calidad."
+    comparison = _trace_comparison(rule.id_regla, _criterion(rule, "Fuente_Valor_Esperado"), found, documents[0] if len(documents) == 1 else "Escritura_Firma", int(page.get("pagina", 0) or 0) or None, "Minuta_hipoteca.docx", None, state, observation)
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _validate(
+    rule: ReglaNegocio,
+    values: dict[str, list[dict[str, Any]]],
+    configuration: ProjectConfiguration | None = None,
+    classifications: dict[str, str] | None = None,
+    ocr: dict[str, Any] | None = None,
+) -> ResultadoValidacion:
+    comparison_type = _criterion(rule, "Tipo_Comparacion")
+    if comparison_type and configuration is not None:
+        classifications = classifications or {}
+        ocr = ocr or {}
+        if not _condition_applies(rule, values):
+            return _not_applicable(rule)
+        if comparison_type == "Documento_Unico":
+            return _validate_unique_document(rule, classifications)
+        if comparison_type in {"Campo_Obligatorio_Comparado", "Entidad_Representada"}:
+            return _validate_mandatory_field(rule, values, classifications, ocr)
+        if comparison_type == "Clausula_Minuta":
+            return _validate_clause(rule, configuration, classifications, ocr)
+        if comparison_type == "Poder_Catalogo":
+            return _validate_power(rule, configuration, classifications, ocr)
+        if comparison_type in {"Sin_Marcadores", "Sin_Instrucciones", "Sin_Duplicados", "Orden_Secciones"}:
+            return _validate_quality(rule, classifications, ocr)
     comparisons = tuple(_comparison(column, expected, values[_normalizar(column)]) for column, expected in rule.criterios.items() if _normalizar(column) in values)
     if not comparisons or any(item.estado == "No existe información" for item in comparisons):
         state, observation = "No existe información", "No hay campos extraídos que correspondan a los criterios de esta regla."
@@ -246,7 +613,10 @@ def validate_expediente_data(project_root: Path, expediente_id: str) -> Resultad
         raise ValidationError(str(error)) from error
     rules = load_business_rules(configuration)
     values = _field_values(_load_extraction(configuration, expediente_id))
-    validations = tuple(_validate(rule, values) for rule in rules)
+    classifications = _classification_index(_load_result(configuration, expediente_id, "clasificacion_documental.json"))
+    ocr_filename = str(configuration.values.get("ocr", {}).get("archivo_salida", "texto_extraido.json"))
+    ocr = _load_result(configuration, expediente_id, ocr_filename)
+    validations = tuple(_validate(rule, values, configuration, classifications, ocr) for rule in rules)
     summary = ResumenValidacion(len(rules), len(validations), sum(item.estado == "Cumple" for item in validations), sum(item.estado == "No cumple" for item in validations), sum(item.estado == "No existe información" for item in validations), sum(item.estado == "No aplica" for item in validations))
     target = _path(configuration, expediente_id)
     target.parent.mkdir(parents=True, exist_ok=True)

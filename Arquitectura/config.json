@@ -39,6 +39,11 @@
     "agents": "./AGENTS.md"
   },
 
+  "conocimiento": {
+    "minuta_hipoteca": "Minutas/Minuta_hipoteca.docx",
+    "poderes_ecopetrol": "Poderes/Poderes_ecopetrol_2026.xlsx"
+  },
+
   "hojas": {
     "campos": "01_Campos_Extraccion",
     "matriz": "02_Matriz_Origen_Datos",
@@ -87,7 +92,14 @@
     "ignorar_mayusculas": true,
     "ignorar_tildes": true,
     "registrar_trazabilidad": true,
-    "comparar_documentos": true
+    "comparar_documentos": true,
+    "tipo_documental_base": "Escritura_Firma",
+    "estado_interfaz_valido": "Validado",
+    "estado_interfaz_invalido": "No validado",
+    "umbral_coincidencia_clausula": 0.58,
+    "equivalencias_juridicas": {
+      "sin limite de cuantia": ["cuantia indeterminada"]
+    }
   },
 
   "documentos": {

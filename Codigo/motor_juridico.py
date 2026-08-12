@@ -68,6 +68,7 @@ class ResultadoMotorJuridico:
     observaciones: tuple[ObservacionJuridica, ...]
     archivo_salida: str
     resumen: ResumenMotorJuridico
+    concepto_juridico: str = ""
 
 
 _VALIDATION_STATES = {"Cumple", "No cumple", "No existe información", "No aplica"}
@@ -180,6 +181,13 @@ def _is_enabling(rule: ReglaNegocio) -> bool:
     return status is None or _normalizar(status) == "vigente"
 
 
+def _comparison_type(rule: ReglaNegocio) -> str:
+    return next(
+        (value for column, value in rule.criterios.items() if _normalizar(column) == "tipo comparacion"),
+        "",
+    )
+
+
 def _evaluate_rule(rule: ReglaNegocio, validation: dict[str, Any]) -> EvaluacionReglaJuridica:
     validation_state = str(validation["estado"])
     selected = validation_state == "Cumple"
@@ -219,6 +227,21 @@ def _evaluate_type(
     selected = tuple(rule for rule in rules if validations[rule.id_regla]["estado"] == "Cumple")
     selected_ids = tuple(rule.id_regla for rule in selected)
     configured_states = tuple(dict.fromkeys(status for rule in selected if (status := _rule_status(rule))))
+    if any(_comparison_type(rule) for rule in rules):
+        states = {str(validations[rule.id_regla]["estado"]) for rule in rules}
+        if "No cumple" in states:
+            state = "No cumple"
+            observation = "Al menos un control obligatorio de este grupo no fue validado."
+        elif "No existe información" in states:
+            state = "No existe información"
+            observation = "Falta evidencia documental para completar al menos un control de este grupo."
+        elif states <= {"No aplica"}:
+            state = "No aplica"
+            observation = "Todos los controles de este grupo fueron declarados no aplicables."
+        else:
+            state = "Cumple"
+            observation = "Todos los controles aplicables de este grupo fueron validados."
+        return ResultadoTipoRegla(rule_type, state, len(rules), selected_ids, configured_states, observation)
     if selected:
         if all(_is_enabling(rule) for rule in selected):
             state = "Cumple"
@@ -246,6 +269,27 @@ def _evaluate_type(
         selected_ids,
         configured_states,
         observation,
+    )
+
+
+def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
+    failed = [item for item in validations.values() if item.get("estado") in {"No cumple", "No existe información"}]
+    if not failed:
+        return (
+            "El expediente fue validado contra los campos obligatorios, la estructura de Minuta_hipoteca y "
+            "las reglas de poderes aplicables. No se identificaron hallazgos que impidan la conformidad. "
+            "El resultado es una propuesta para revisión del analista jurídico."
+        )
+    details: list[str] = []
+    for item in failed[:5]:
+        comparisons = item.get("comparaciones", [])
+        comparison = comparisons[0] if isinstance(comparisons, list) and comparisons else {}
+        page = comparison.get("pagina_validada") or "sin página"
+        details.append(f"{item.get('id_regla')} ({comparison.get('documento_validado') or 'Escritura_Firma'}, página {page})")
+    return (
+        f"El análisis concluye {result} y registra {len(failed)} hallazgo(s) o ausencia(s) de evidencia. "
+        f"Controles principales: {', '.join(details)}. Revise la trazabilidad antes de emitir el concepto definitivo; "
+        "el sistema no reemplaza el criterio profesional."
     )
 
 
@@ -307,6 +351,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         sum(item.estado == "No existe información" for item in results_by_type),
         sum(item.estado == "No aplica" for item in results_by_type),
     )
+    concept = _legal_concept(result, validations)
 
     target = _output_path(configuration, expediente_id)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -321,6 +366,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
                 "origen_reglas": str(configuration.values["hojas"]["reglas"]),
                 "origen_validaciones": source.relative_to(configuration.project_root).as_posix(),
                 "resultado": result,
+                "concepto_juridico": concept,
                 "evaluaciones_reglas": [asdict(item) for item in evaluations],
                 "resultados_por_tipo": [asdict(item) for item in results_by_type],
                 "observaciones": [asdict(item) for item in observations],
@@ -343,4 +389,5 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         observations,
         target.relative_to(configuration.project_root).as_posix(),
         summary,
+        concept,
     )
