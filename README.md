@@ -29,10 +29,9 @@ Conocimiento/
 Contiene la base documental utilizada por la IA.
 
 Durante el MVP, la persona analista selecciona en la interfaz los archivos que
-desea analizar desde cualquier carpeta del computador mediante el selector
-nativo de Windows. El backend conserva únicamente las rutas durante la sesión,
-lee los originales al iniciar el análisis y no copia, mueve ni modifica los
-documentos.
+desea analizar desde cualquier carpeta del computador. El backend conserva el
+contenido únicamente en memoria durante la sesión: no copia, mueve ni modifica
+los documentos originales.
 
 Los casos conservados fuera del proyecto son antecedentes de consulta humana.
 No se configuran como entrada del motor, no se consultan durante el análisis y
@@ -132,9 +131,8 @@ python -m Codigo interfaz --puerto 8000
 
 Abra `http://127.0.0.1:8000/` en el navegador. La interfaz se sirve desde
 `Programa/index.html` sin modificar ese archivo. Los botones se conectan con
-el backend: **Seleccionar archivos** abre el selector nativo de Windows y
-registra temporalmente las rutas elegidas; **Iniciar análisis** ejecuta
-lectura directa de los originales, clasificación, OCR, extracción,
+el backend: **Seleccionar archivos** recibe temporalmente los documentos en
+memoria y **Iniciar análisis** ejecuta clasificación, OCR, extracción,
 normalización, validación y concepto jurídico.
 
 El servidor debe permanecer ejecutándose mientras se usa la interfaz. Si se
@@ -144,10 +142,10 @@ nuevo el comando anterior, recargue la página y vuelva a seleccionar los
 documentos.
 
 Mantenga una sola instancia del servidor en el puerto 8000. La selección se
-conserva como rutas temporales en el proceso que la recibe. Si ejecuta
-nuevamente el comando mientras GIOJ ya está activo, la terminal mostrará la
-dirección de la instancia existente; no es un error ni es necesario iniciar
-otro proceso. Recargue esa página antes de volver a seleccionar los documentos.
+conserva en memoria del proceso que la recibe. Si ejecuta nuevamente el comando
+mientras GIOJ ya está activo, la terminal mostrará la dirección de la instancia
+existente; no es un error ni es necesario iniciar otro proceso. Recargue esa
+página antes de volver a seleccionar los documentos.
 
 Para detener limpiamente la instancia desde cualquier terminal, ejecute:
 
@@ -167,23 +165,23 @@ deben retirarlo, ocultarlo detrás del panel de resultados ni sustituirlo sin
 autorización funcional. La prueba `tests.test_ocr` protege este requisito.
 
 La selección se hace con **Seleccionar archivos** y puede partir de cualquier
-carpeta accesible para Windows. La ruta absoluta permanece solo en la sesión
-del servidor y no se transmite a la interfaz ni se incluye en resultados o
-logs. Solo los resultados derivados se escriben en `Salida/`.
+carpeta accesible para el navegador. El navegador transmite el contenido al
+backend local sin revelar ni conservar las rutas absolutas. La selección
+permanece en memoria y solo los resultados derivados se escriben en `Salida/`.
 
 ---
 
 # Selección de archivos (GIOJ-003)
 
-El botón **Seleccionar archivos** abre el selector nativo de Windows y admite
-PDF, DOCX e imágenes compatibles desde cualquier ubicación. Se rechazan
-formatos no compatibles y nombres duplicados dentro de una misma selección.
+El botón **Seleccionar archivos** admite PDF, DOCX e imágenes compatibles
+desde cualquier ubicación accesible para el navegador. Se rechazan archivos
+vacíos, formatos no compatibles y nombres duplicados dentro de una misma
+selección. El límite total configurado del MVP es 250 MB. Si se excede, la
+interfaz informa el tamaño seleccionado antes de intentar la transmisión.
 
-Los bytes seleccionados no se cargan ni se conservan en la memoria del
-servidor. Los archivos fuente no se escriben en `Expedientes/` ni en otra
-carpeta. Una nueva selección reemplaza las rutas temporales anteriores. Si un
-original se mueve, se renombra o se elimina antes de iniciar el análisis, GIOJ
-lo reporta y continúa con los demás documentos cuando sea posible.
+Los bytes seleccionados permanecen únicamente en la memoria del servidor
+local. Los archivos fuente no se escriben en `Expedientes/` ni en otra carpeta.
+Una nueva selección reemplaza la selección temporal anterior.
 
 ---
 
