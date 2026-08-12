@@ -502,6 +502,8 @@
         const progressFill = document.getElementById('progress-fill');
         let selectedSelectionId = '';
         let maxSelectionMb = 100;
+        const analyzeButtonReadyText = 'INICIAR ANÁLISIS';
+        const analyzeButtonPreparingText = 'PREPARANDO ARCHIVOS';
         const serverUnavailableMessage = 'El servidor local no está disponible. Inicie GIOJ en el puerto 8000, recargue esta página y vuelva a seleccionar los archivos.';
 
         const request = async (url, payload = {}) => {
@@ -519,6 +521,18 @@
 
         const showMessage = (target, message) => {
             target.textContent = message;
+        };
+
+        const setAnalyzeButtonReady = () => {
+            btnAnalyze.disabled = false;
+            btnAnalyze.textContent = analyzeButtonReadyText;
+            btnAnalyze.setAttribute('aria-busy', 'false');
+        };
+
+        const setAnalyzeButtonPreparing = () => {
+            btnAnalyze.disabled = true;
+            btnAnalyze.textContent = analyzeButtonPreparingText;
+            btnAnalyze.setAttribute('aria-busy', 'true');
         };
 
         const selectFiles = async files => {
@@ -627,6 +641,7 @@
 
         const showSelectionError = message => {
             selectedSelectionId = '';
+            setAnalyzeButtonReady();
             progressContainer.hidden = false;
             progressContainer.classList.add('is-error');
             progressFill.style.width = '0%';
@@ -668,9 +683,11 @@
         fileInput.addEventListener('change', async () => {
             const files = Array.from(fileInput.files || []);
             if (!files.length) {
+                setAnalyzeButtonReady();
                 return;
             }
             selectedSelectionId = '';
+            setAnalyzeButtonPreparing();
             renderDocuments(files.map(file => ({nombre: file.name})));
             dropzoneStatus.textContent = `${files.length} archivo(s) seleccionado(s).`;
             const selectionMb = files.reduce((total, file) => total + file.size, 0) / (1024 * 1024);
@@ -680,7 +697,6 @@
                 showSelectionError(message);
                 return;
             }
-            actionHint.textContent = 'Preparando selección en memoria…';
             try {
                 const result = await selectFiles(files);
                 if (result.error || !Array.isArray(result.seleccion?.documentos)) {
@@ -694,6 +710,7 @@
                 showMessage(outputInfo, result.detalle);
                 progressContainer.hidden = true;
                 progressContainer.classList.remove('is-error');
+                setAnalyzeButtonReady();
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'No fue posible seleccionar los archivos.';
                 actionHint.textContent = message;
@@ -706,9 +723,9 @@
                 showSelectionError('Use “Seleccionar archivos” antes de iniciar el análisis.');
                 return;
             }
-            const originalButtonText = btnAnalyze.textContent;
             btnAnalyze.disabled = true;
             btnAnalyze.textContent = 'ANALIZANDO…';
+            btnAnalyze.setAttribute('aria-busy', 'true');
             progressContainer.hidden = false;
             progressContainer.classList.remove('is-error');
             progressFill.style.width = '0%';
@@ -766,8 +783,7 @@
                 progressStage.textContent = 'El análisis terminó con error';
             } finally {
                 window.clearInterval(progressTimer);
-                btnAnalyze.disabled = false;
-                btnAnalyze.textContent = originalButtonText;
+                setAnalyzeButtonReady();
             }
         });
 
