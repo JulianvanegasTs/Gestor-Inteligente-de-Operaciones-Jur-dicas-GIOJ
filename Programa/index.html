@@ -246,7 +246,7 @@
         }
 
         .box-info {
-            height: 120px;
+            height: 360px;
             margin-bottom: 8px;
         }
 
@@ -548,83 +548,29 @@
             }
         };
 
-        const renderValidationTable = (title, columns, rows) => {
-            const wrap = window.document.createElement('section');
-            wrap.className = 'validation-table-wrap';
-            const heading = window.document.createElement('h3');
-            heading.className = 'validation-table-title';
-            heading.textContent = title;
-            const table = window.document.createElement('table');
-            table.className = 'validation-table';
-            const header = window.document.createElement('tr');
-            for (const column of columns) {
-                const cell = window.document.createElement('th');
-                cell.textContent = column.label;
-                header.appendChild(cell);
+        const renderTraceability = result => {
+            const traceability = result.trazabilidad;
+            const inconsistencies = Array.isArray(traceability?.inconsistencias)
+                ? traceability.inconsistencias
+                : [];
+            const lines = [traceability?.sintesis_dictamen || result.detalle];
+            if (!inconsistencies.length) {
+                lines.push('', 'No se registraron inconsistencias.');
             }
-            const head = window.document.createElement('thead');
-            head.appendChild(header);
-            table.appendChild(head);
-            const body = window.document.createElement('tbody');
-            for (const row of rows) {
-                const line = window.document.createElement('tr');
-                for (const column of columns) {
-                    const cell = window.document.createElement('td');
-                    cell.textContent = String(row[column.key] ?? 'No disponible');
-                    line.appendChild(cell);
-                }
-                body.appendChild(line);
+            for (const [index, inconsistency] of inconsistencies.entries()) {
+                const page = Number.isInteger(inconsistency.pagina) ? inconsistency.pagina : 0;
+                lines.push(
+                    '',
+                    `${index + 1}.`,
+                    `- Página: ${page}`,
+                    `- Valor encontrado: ${String(inconsistency.valor_encontrado ?? 'No se encontró información')}`,
+                    `- Valor esperado: ${String(inconsistency.valor_esperado ?? 'No disponible')}`,
+                    `- Resultado: ${inconsistency.resultado === 'Coincide' ? 'Coincide' : 'No coincide'}`
+                );
             }
-            table.appendChild(body);
-            wrap.append(heading, table);
-            return wrap;
-        };
-
-        const renderAnalysisResults = result => {
-            const rules = Array.isArray(result.validacion?.reglas) ? result.validacion.reglas : [];
-            const flatten = rule => (Array.isArray(rule.comparaciones) && rule.comparaciones.length
-                ? rule.comparaciones
-                : [{}]).map(comparison => ({
-                    regla: rule.id_regla,
-                    documento_validado: comparison.documento_validado,
-                    pagina_validada: comparison.pagina_validada,
-                    documento_comparado: comparison.documento_comparado,
-                    pagina_comparada: comparison.pagina_comparada ?? comparison.referencia_comparada,
-                    valor_esperado: comparison.valor_esperado,
-                    valor_encontrado: Array.isArray(comparison.valor_encontrado)
-                        ? comparison.valor_encontrado.join(' | ')
-                        : comparison.valor_encontrado,
-                    estado: comparison.estado_interfaz || (rule.estado === 'Cumple' ? 'Validado' : 'No validado')
-                }));
-            const minuteFindings = rules
-                .filter(rule => rule.tipo_regla === 'Formato_Minuta' && !['Cumple', 'No aplica'].includes(rule.estado))
-                .flatMap(flatten);
-            const mandatoryFields = rules.filter(rule => rule.tipo_regla === 'Campo_Obligatorio').flatMap(flatten);
-            const powers = rules.filter(rule => rule.tipo_regla === 'Poder_Autorizado').flatMap(flatten);
+            showMessage(outputInfo, lines.join('\n'));
             validationDetails.replaceChildren();
-            const minuteColumns = [
-                {key: 'regla', label: 'Regla / cláusula'},
-                {key: 'documento_validado', label: 'Documento validado'},
-                {key: 'pagina_validada', label: 'Página'},
-                {key: 'valor_esperado', label: 'Valor esperado'},
-                {key: 'valor_encontrado', label: 'Valor encontrado'}
-            ];
-            const fieldColumns = [
-                {key: 'regla', label: 'Campo'},
-                {key: 'documento_validado', label: 'Documento validado'},
-                {key: 'pagina_validada', label: 'Página'},
-                {key: 'documento_comparado', label: 'Documento comparado'},
-                {key: 'pagina_comparada', label: 'Página / sección'},
-                {key: 'valor_esperado', label: 'Valor esperado'},
-                {key: 'valor_encontrado', label: 'Valor encontrado'},
-                {key: 'estado', label: 'Estado'}
-            ];
-            validationDetails.append(
-                renderValidationTable('Diferencias frente a Minuta_hipoteca', minuteColumns, minuteFindings),
-                renderValidationTable('Datos obligatorios de 01_Campos_Extraccion', fieldColumns, mandatoryFields),
-                renderValidationTable('Validación de poderes', fieldColumns, powers)
-            );
-            validationDetails.hidden = false;
+            validationDetails.hidden = true;
         };
 
         const renderDocuments = (documents) => {
@@ -769,8 +715,7 @@
                     throw new Error(result.error);
                 }
                 showMessage(outputSummary, result.motor_juridico?.concepto_juridico || result.mensaje);
-                showMessage(outputInfo, result.detalle);
-                renderAnalysisResults(result);
+                renderTraceability(result);
                 progressFill.style.width = '100%';
                 progressPercent.textContent = '100%';
                 progressTrack.setAttribute('aria-valuenow', '100');

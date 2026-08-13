@@ -60,6 +60,26 @@ class ResumenMotorJuridico:
 
 
 @dataclass(frozen=True)
+class RegistroTrazabilidad:
+    id_regla: str
+    documento: str
+    pagina: int
+    campo: str
+    valor_encontrado: str
+    valor_esperado: str
+    resultado: str
+    observacion: str
+    estado_validacion: str = ""
+
+
+@dataclass(frozen=True)
+class ResultadoTrazabilidad:
+    sintesis_dictamen: str
+    registros: tuple[RegistroTrazabilidad, ...]
+    inconsistencias: tuple[RegistroTrazabilidad, ...]
+
+
+@dataclass(frozen=True)
 class ResultadoMotorJuridico:
     id_expediente: str
     resultado: str
@@ -69,6 +89,7 @@ class ResultadoMotorJuridico:
     archivo_salida: str
     resumen: ResumenMotorJuridico
     concepto_juridico: str = ""
+    trazabilidad: ResultadoTrazabilidad | None = None
 
 
 _VALIDATION_STATES = {"Cumple", "No cumple", "No existe información", "No aplica"}
@@ -280,28 +301,118 @@ def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
             "las reglas de poderes aplicables. No se identificaron hallazgos que impidan la conformidad. "
             "El resultado es una propuesta para revisión del analista jurídico."
         )
-    details: list[str] = []
-    for item in failed:
-        comparisons = item.get("comparaciones", [])
-        comparisons = comparisons if isinstance(comparisons, list) and comparisons else [{}]
-        for comparison in comparisons:
-            if comparison.get("estado_interfaz") == "Validado":
-                continue
-            found = comparison.get("valor_encontrado")
-            if isinstance(found, list):
-                found = " | ".join(str(value) for value in found)
-            details.append(
-                f"{len(details) + 1}. {item.get('id_regla')}: archivo "
-                f"{comparison.get('documento_validado') or 'no identificado'}, página "
-                f"{comparison.get('pagina_validada') or 'sin página'}; valor esperado: "
-                f"{comparison.get('valor_esperado') or 'no disponible'}; valor encontrado: "
-                f"{found or 'no disponible'}."
+    return (
+        f"El análisis concluye {result} al registrar {len(failed)} validación(es) adversa(s) "
+        "o sin evidencia suficiente. El resultado constituye una propuesta para revisión del "
+        "analista jurídico y no reemplaza su criterio profesional."
+    )
+
+
+def _as_trace_text(value: Any, fallback: str) -> str:
+    if isinstance(value, (list, tuple)):
+        text = " | ".join(str(item).strip() for item in value if str(item).strip())
+    else:
+        text = str(value).strip() if value is not None else ""
+    return text or fallback
+
+
+def _trace_page(comparison: dict[str, Any]) -> int:
+    candidates = [comparison.get("pagina_validada")]
+    origin_pages = comparison.get("pagina_origen")
+    if isinstance(origin_pages, (list, tuple)) and origin_pages:
+        candidates.append(origin_pages[0])
+    for candidate in candidates:
+        if isinstance(candidate, bool):
+            continue
+        if isinstance(candidate, (int, float)) and int(candidate) > 0:
+            return int(candidate)
+        if isinstance(candidate, str) and candidate.strip().isdigit() and int(candidate.strip()) > 0:
+            return int(candidate.strip())
+    return 0
+
+
+def _trace_document(comparison: dict[str, Any]) -> str:
+    validated = comparison.get("documento_validado")
+    if isinstance(validated, str) and validated.strip():
+        return validated.strip()
+    origins = comparison.get("documento_origen")
+    if isinstance(origins, (list, tuple)) and origins:
+        return _as_trace_text(origins[0], "No identificado")
+    return _as_trace_text(comparison.get("documento_destino"), "No identificado")
+
+
+def _trace_field(rule: ReglaNegocio, comparison: dict[str, Any]) -> str:
+    field = comparison.get("campo")
+    if isinstance(field, str) and field.strip():
+        return field.strip()
+    return next(
+        (
+            value
+            for column, value in rule.criterios.items()
+            if _normalizar(column) == _normalizar("ID_Campo_Clausula")
+        ),
+        rule.id_regla,
+    )
+
+
+def _build_traceability(
+    result: str,
+    rules: tuple[ReglaNegocio, ...],
+    validations: dict[str, dict[str, Any]],
+) -> ResultadoTrazabilidad:
+    """Consolida todas las decisiones ya evidenciadas por las validaciones."""
+    records: list[RegistroTrazabilidad] = []
+    for rule in rules:
+        validation = validations[rule.id_regla]
+        state = str(validation.get("estado", "No existe información"))
+        raw_comparisons = validation.get("comparaciones")
+        comparisons = raw_comparisons if isinstance(raw_comparisons, list) and raw_comparisons else [{}]
+        for raw_comparison in comparisons:
+            comparison = raw_comparison if isinstance(raw_comparison, dict) else {}
+            comparison_state = str(comparison.get("estado") or state)
+            records.append(
+                RegistroTrazabilidad(
+                    id_regla=rule.id_regla,
+                    documento=_trace_document(comparison),
+                    pagina=_trace_page(comparison),
+                    campo=_trace_field(rule, comparison),
+                    valor_encontrado=_as_trace_text(
+                        comparison.get("valor_encontrado"),
+                        "No se encontró información",
+                    ),
+                    valor_esperado=_as_trace_text(
+                        comparison.get("valor_esperado"),
+                        "No disponible",
+                    ),
+                    resultado=(
+                        "No coincide"
+                        if comparison_state in {"No cumple", "No existe información"}
+                        else "Coincide"
+                    ),
+                    observacion=_as_trace_text(
+                        comparison.get("observacion"),
+                        _as_trace_text(validation.get("observacion"), "Sin observación registrada"),
+                    ),
+                    estado_validacion=state,
+                )
             )
-    return "\n".join((
-        f"El análisis concluye {result} y registra {len(details)} inconsistencia(s) o ausencia(s) de evidencia.",
-        *details,
-        "Revise la trazabilidad antes de emitir el concepto definitivo; el sistema no reemplaza el criterio profesional.",
-    ))
+    inconsistencies = tuple(record for record in records if record.resultado == "No coincide")
+    if inconsistencies:
+        synthesis = (
+            "Examinado el acervo documental y confrontada la escritura de firma con las fuentes "
+            f"rectoras del análisis, se identificaron {len(inconsistencies)} inconsistencia(s) que "
+            "afectan la correspondencia jurídica del instrumento. En mérito de lo expuesto, se "
+            f"propone dictamen de {result.lower()}, sujeto a la revisión y al criterio profesional "
+            "del analista jurídico."
+        )
+    else:
+        synthesis = (
+            "Examinado el acervo documental y confrontada la escritura de firma con las fuentes "
+            "rectoras del análisis, se colige que las validaciones aplicables guardan "
+            "correspondencia. En mérito de lo expuesto, se propone dictamen de conformidad, sujeto "
+            "a la revisión y al criterio profesional del analista jurídico."
+        )
+    return ResultadoTrazabilidad(synthesis, tuple(records), inconsistencies)
 
 
 def _logger(directory: Path) -> logging.Logger:
@@ -363,6 +474,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         sum(item.estado == "No aplica" for item in results_by_type),
     )
     concept = _legal_concept(result, validations)
+    traceability = _build_traceability(result, rules, validations)
 
     target = _output_path(configuration, expediente_id)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -382,6 +494,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
                 "resultados_por_tipo": [asdict(item) for item in results_by_type],
                 "observaciones": [asdict(item) for item in observations],
                 "resumen": asdict(summary),
+                "trazabilidad": asdict(traceability),
             },
             ensure_ascii=False,
             indent=2,
@@ -391,6 +504,14 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
     logger = _logger(configuration.route("logs"))
     for item in results_by_type:
         logger.info("MOTOR JURIDICO | %s | %s", item.tipo_regla, item.estado)
+    for item in traceability.registros:
+        logger.info(
+            "TRAZABILIDAD | %s | %s | pagina=%s | %s",
+            item.id_regla,
+            item.resultado,
+            item.pagina,
+            item.documento,
+        )
     logger.info("MOTOR JURIDICO COMPLETADO | %s | %s", expediente_id, result)
     return ResultadoMotorJuridico(
         expediente_id,
@@ -401,4 +522,5 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         target.relative_to(configuration.project_root).as_posix(),
         summary,
         concept,
+        traceability,
     )

@@ -9,7 +9,13 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from Codigo.motor_juridico import LegalEngineError, _legal_concept, apply_legal_engine
+from Codigo.motor_juridico import (
+    LegalEngineError,
+    _build_traceability,
+    _legal_concept,
+    apply_legal_engine,
+)
+from Codigo.validacion import ReglaNegocio
 
 
 def _workbook(path: Path) -> None:
@@ -85,7 +91,7 @@ def _validations(root: Path, first: str, second: str) -> None:
 
 
 class LegalEngineTests(unittest.TestCase):
-    def test_legal_concept_enumerates_inconsistencies_with_source_file(self) -> None:
+    def test_legal_concept_does_not_duplicate_traceability(self) -> None:
         concept = _legal_concept("No Conformidad", {
             "MIN-001": {
                 "id_regla": "MIN-001",
@@ -100,9 +106,51 @@ class LegalEngineTests(unittest.TestCase):
             },
         })
 
-        self.assertIn("1. MIN-001: archivo escritura_firma.pdf, página 4", concept)
-        self.assertIn("valor esperado: Texto de la minuta", concept)
-        self.assertIn("valor encontrado: Texto diferente", concept)
+        self.assertIn("concluye No Conformidad", concept)
+        self.assertNotIn("escritura_firma.pdf", concept)
+        self.assertNotIn("Texto de la minuta", concept)
+
+    def test_traceability_registers_every_decision_and_formats_inconsistency(self) -> None:
+        rule = ReglaNegocio(
+            "MIN-001",
+            "Formato_Minuta",
+            "Conocimiento/Minutas/Minuta_hipoteca.docx",
+            {"ID_Campo_Clausula": "MIN-CLA-001"},
+        )
+        traceability = _build_traceability(
+            "No Conformidad",
+            (rule,),
+            {
+                "MIN-001": {
+                    "id_regla": "MIN-001",
+                    "estado": "No cumple",
+                    "observacion": "La cláusula no corresponde.",
+                    "comparaciones": [
+                        {
+                            "documento_validado": "escritura_firma.pdf",
+                            "pagina_validada": 4,
+                            "valor_esperado": "Texto de la minuta",
+                            "valor_encontrado": ["Texto diferente"],
+                            "estado": "No cumple",
+                            "observacion": "El valor encontrado no coincide.",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(len(traceability.registros), 1)
+        inconsistency = traceability.inconsistencias[0]
+        self.assertIsInstance(inconsistency.pagina, int)
+        self.assertEqual(inconsistency.pagina, 4)
+        self.assertEqual(inconsistency.documento, "escritura_firma.pdf")
+        self.assertEqual(inconsistency.campo, "MIN-CLA-001")
+        self.assertEqual(inconsistency.valor_encontrado, "Texto diferente")
+        self.assertEqual(inconsistency.valor_esperado, "Texto de la minuta")
+        self.assertEqual(inconsistency.resultado, "No coincide")
+        self.assertEqual(inconsistency.observacion, "El valor encontrado no coincide.")
+        self.assertEqual(inconsistency.estado_validacion, "No cumple")
+        self.assertIn("En mérito de lo expuesto", traceability.sintesis_dictamen)
 
     def test_conformity_uses_the_matching_current_alternative(self) -> None:
         root = _project()
@@ -120,6 +168,8 @@ class LegalEngineTests(unittest.TestCase):
         self.assertEqual(saved["resultado"], "Conformidad")
         self.assertEqual(saved["origen_reglas"], "04_Reglas_Negocio")
         self.assertEqual(saved["origen_validaciones"], "Salida/EXP-009/validaciones.json")
+        self.assertEqual(len(saved["trazabilidad"]["registros"]), 2)
+        self.assertIsNotNone(result.trazabilidad)
         self.assertIn(
             "MOTOR JURIDICO COMPLETADO",
             (root / "Logs" / "motor_juridico.log").read_text(encoding="utf-8"),

@@ -499,6 +499,11 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         "resumen": asdict(legal_result.resumen),
                         "observaciones": [asdict(item) for item in legal_result.observaciones],
                     },
+                    "trazabilidad": (
+                        asdict(legal_result.trazabilidad)
+                        if legal_result.trazabilidad is not None
+                        else None
+                    ),
                 })
                 return
             pending = {

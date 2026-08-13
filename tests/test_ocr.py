@@ -17,7 +17,12 @@ from Codigo.config import load_configuration
 from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.extraccion import ResultadoExtraccion
 from Codigo.expediente import DocumentoExpediente, create_selected_file
-from Codigo.motor_juridico import ResultadoMotorJuridico, ResumenMotorJuridico
+from Codigo.motor_juridico import (
+    RegistroTrazabilidad,
+    ResultadoMotorJuridico,
+    ResultadoTrazabilidad,
+    ResumenMotorJuridico,
+)
 from Codigo.normalizacion import ResultadoNormalizacion, ResumenNormalizacion
 from Codigo.ocr import (
     OCRExtractionError,
@@ -145,13 +150,34 @@ class OCRTests(unittest.TestCase):
                 (DocumentoClasificado(extracted.documento, None, None, "No identificado", (), "Sin evidencia."),),
                 "Salida/EXP-WEB/clasificacion_documental.json",
             )
+            trace_record = RegistroTrazabilidad(
+                "MIN-001",
+                extracted.documento,
+                1,
+                "MIN-CLA-001",
+                "Texto diferente",
+                "Texto esperado",
+                "No coincide",
+                "La cláusula difiere.",
+            )
+            legal_result = ResultadoMotorJuridico(
+                "EXP-WEB",
+                "No Conformidad",
+                (),
+                (),
+                (),
+                "Salida/EXP-WEB/resultado_juridico.json",
+                ResumenMotorJuridico(0, 0, 0, 0, 0, 0, 0),
+                "Concepto jurídico.",
+                ResultadoTrazabilidad("Síntesis jurídica.", (trace_record,), (trace_record,)),
+            )
             with (
                 patch("Codigo.ocr._extract_document", return_value=[extracted]),
                 patch("Codigo.web.classify_expediente_documents", return_value=classification),
                 patch("Codigo.web.extract_expediente_data", return_value=ResultadoExtraccion("EXP-WEB", (), (), "Salida/EXP-WEB/extraccion_documental.json")),
                 patch("Codigo.web.normalize_expediente_data", return_value=ResultadoNormalizacion("EXP-WEB", (), (), "Salida/EXP-WEB/normalizacion_documental.json", ResumenNormalizacion(0, 0, 0, ()))),
                 patch("Codigo.web.validate_expediente_data", return_value=ResultadoValidaciones("EXP-WEB", (), "Salida/EXP-WEB/validaciones_documentales.json", ResumenValidacion(0, 0, 0, 0, 0, 0))),
-                patch("Codigo.web.apply_legal_engine", return_value=ResultadoMotorJuridico("EXP-WEB", "Conformidad", (), (), (), "Salida/EXP-WEB/resultado_juridico.json", ResumenMotorJuridico(0, 0, 0, 0, 0, 0, 0))),
+                patch("Codigo.web.apply_legal_engine", return_value=legal_result),
             ):
                 with urlopen(request) as response:
                     payload = json.loads(response.read().decode("utf-8"))
@@ -163,7 +189,7 @@ class OCRTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-        self.assertEqual(payload["mensaje"], "Resultado jurídico: Conformidad.")
+        self.assertEqual(payload["mensaje"], "Resultado jurídico: No Conformidad.")
         self.assertEqual(payload["ocr"]["archivo_salida"], "Salida/EXP-WEB/texto_extraido.json")
         self.assertIn("Clasificación: Salida/EXP-WEB/clasificacion_documental.json", payload["detalle"])
         self.assertEqual(payload["clasificacion"]["archivo_salida"], "Salida/EXP-WEB/clasificacion_documental.json")
@@ -171,7 +197,10 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(payload["normalizacion"]["archivo_salida"], "Salida/EXP-WEB/normalizacion_documental.json")
         self.assertEqual(payload["validacion"]["archivo_salida"], "Salida/EXP-WEB/validaciones_documentales.json")
         self.assertEqual(payload["motor_juridico"]["archivo_salida"], "Salida/EXP-WEB/resultado_juridico.json")
-        self.assertEqual(payload["motor_juridico"]["resultado"], "Conformidad")
+        self.assertEqual(payload["motor_juridico"]["resultado"], "No Conformidad")
+        self.assertEqual(payload["trazabilidad"]["sintesis_dictamen"], "Síntesis jurídica.")
+        self.assertIsInstance(payload["trazabilidad"]["inconsistencias"][0]["pagina"], int)
+        self.assertEqual(payload["trazabilidad"]["inconsistencias"][0]["resultado"], "No coincide")
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
         self.assertEqual(output["textos"][0]["pagina"], 1)
@@ -185,7 +214,7 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(progress["archivo_normalizacion"], "Salida/EXP-WEB/normalizacion_documental.json")
         self.assertEqual(progress["archivo_validaciones"], "Salida/EXP-WEB/validaciones_documentales.json")
         self.assertEqual(progress["archivo_resultado_juridico"], "Salida/EXP-WEB/resultado_juridico.json")
-        self.assertEqual(progress["resultado_juridico"], "Conformidad")
+        self.assertEqual(progress["resultado_juridico"], "No Conformidad")
         self.assertEqual(progress["completadas"], 1)
         self.assertEqual(progress["total"], 1)
 
@@ -216,11 +245,16 @@ class OCRTests(unittest.TestCase):
         self.assertIn('setAnalyzeButtonPreparing();', interface)
         self.assertNotIn('Preparando selección en memoria', interface)
         self.assertIn('id="validation-details"', interface)
-        self.assertIn("Diferencias frente a Minuta_hipoteca", interface)
-        self.assertIn("Datos obligatorios de 01_Campos_Extraccion", interface)
-        self.assertIn("Documento comparado", interface)
+        self.assertLess(interface.index("Validaciones realizadas:"), interface.index('id="output-info"'))
+        self.assertIn("renderTraceability", interface)
+        self.assertIn("sintesis_dictamen", interface)
+        self.assertIn("Página", interface)
         self.assertIn("Valor esperado", interface)
         self.assertIn("Valor encontrado", interface)
+        self.assertIn("Resultado", interface)
+        self.assertIn("Coincide", interface)
+        self.assertIn("No coincide", interface)
+        self.assertNotIn("Diferencias frente a Minuta_hipoteca", interface)
 
     def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
         tsv = (
