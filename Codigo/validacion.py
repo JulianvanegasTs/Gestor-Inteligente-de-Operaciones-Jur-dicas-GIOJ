@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-from .clasificacion import _normalizar, _read_shared_strings, _read_sheet, _worksheet_paths
+from .clasificacion import (
+    _normalizar,
+    _read_shared_strings,
+    _read_sheet,
+    _worksheet_paths,
+    load_document_types,
+)
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
 
 
@@ -248,9 +254,67 @@ def _classification_index(payload: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def _document_type_key(value: str) -> tuple[str, ...]:
+    connectors = {"de", "del", "el", "la", "para"}
+    return tuple(token for token in _normalizar(value.replace("_", " ")).split() if token not in connectors)
+
+
 def _documents_of_type(classifications: dict[str, str], document_type: str) -> tuple[str, ...]:
+    wanted = _document_type_key(document_type)
+    return tuple(
+        document
+        for document, current in classifications.items()
+        if _document_type_key(current) == wanted
+    )
+
+
+def _matches_nearby(expression: str, text: str, window: int = 8) -> bool:
+    """Tolera el orden del OCR sin confundir palabras alejadas en la página."""
+    expected = set(_normalizar(expression).split())
+    tokens = _normalizar(text).split()
+    if not expected:
+        return False
+    size = max(len(expected), window)
+    return any(expected.issubset(set(tokens[index:index + size])) for index in range(len(tokens)))
+
+
+def _documents_matching_architecture_type(
+    configuration: ProjectConfiguration,
+    ocr: dict[str, Any],
+    document_type: str,
+) -> tuple[str, ...]:
+    """Ubica por evidencia OCR un origen funcional definido en la arquitectura."""
     wanted = _normalizar(document_type)
-    return tuple(document for document, current in classifications.items() if _normalizar(current) == wanted)
+    cache = ocr.setdefault("_documentos_funcionales", {})
+    if isinstance(cache, dict) and isinstance(cache.get(wanted), tuple):
+        return cache[wanted]
+    definition = next(
+        (
+            item
+            for item in load_document_types(configuration)
+            if _normalizar(item.nombre) == wanted or _normalizar(item.codigo) == wanted
+        ),
+        None,
+    )
+    if definition is None:
+        return ()
+    documents: list[str] = []
+    for item in ocr.get("textos", []):
+        if not isinstance(item, dict):
+            continue
+        document = item.get("documento")
+        text = item.get("texto")
+        if (
+            isinstance(document, str)
+            and isinstance(text, str)
+            and any(_matches_nearby(expression, text) for expression in definition.expresiones)
+            and document not in documents
+        ):
+            documents.append(document)
+    result = tuple(documents)
+    if isinstance(cache, dict):
+        cache[wanted] = result
+    return result
 
 
 def _ocr_pages(payload: dict[str, Any], documents: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -270,11 +334,15 @@ def _matching_page(expected: str, pages: list[dict[str, Any]]) -> tuple[int | No
     if not normalized_expected:
         return None, ""
     expected_tokens = normalized_expected.split()
+    compact_expected = re.sub(r"\W", "", expected, flags=re.UNICODE).casefold()
     best: tuple[float, int | None, str] = (0.0, None, "")
     for item in pages:
         text = str(item.get("texto", ""))
         normalized_text = _normalizar(text)
         if normalized_expected in normalized_text:
+            return int(item.get("pagina", 0) or 0), text[:1200]
+        compact_text = re.sub(r"\W", "", text, flags=re.UNICODE).casefold()
+        if len(compact_expected) >= 5 and compact_expected.isdigit() and compact_expected in compact_text:
             return int(item.get("pagina", 0) or 0), text[:1200]
         text_tokens = set(normalized_text.split())
         score = sum(token in text_tokens for token in set(expected_tokens)) / max(1, len(set(expected_tokens)))
@@ -361,17 +429,25 @@ def _validate_unique_document(rule: ReglaNegocio, classifications: dict[str, str
 def _validate_mandatory_field(
     rule: ReglaNegocio,
     values: dict[str, list[dict[str, Any]]],
+    configuration: ProjectConfiguration,
     classifications: dict[str, str],
     ocr: dict[str, Any],
 ) -> ResultadoValidacion:
     field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
-    escritura_documents = _documents_of_type(classifications, _criterion(rule, "Documento_Validado", "Escritura_Firma"))
+    validated_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
+    escritura_documents = _documents_of_type(classifications, validated_type)
+    if not escritura_documents:
+        escritura_documents = _documents_matching_architecture_type(configuration, ocr, validated_type)
     pages = _ocr_pages(ocr, escritura_documents)
     entries = _all_field_entries(values, field_id)
     source_types = tuple(part for part in _criterion(rule, "Documento_Comparado").split("|") if part)
     expected_entries = [
         entry for entry in entries
-        if any(_normalizar(classifications.get(str(entry.get("documento", "")), "")) == _normalizar(source) for source in source_types)
+        if any(
+            _document_type_key(classifications.get(str(entry.get("documento", "")), ""))
+            == _document_type_key(source)
+            for source in source_types
+        )
     ]
     if not expected_entries:
         expected_entries = [entry for entry in entries if entry.get("documento") not in escritura_documents]
@@ -576,7 +652,7 @@ def _validate(
         if comparison_type == "Documento_Unico":
             return _validate_unique_document(rule, classifications)
         if comparison_type in {"Campo_Obligatorio_Comparado", "Entidad_Representada"}:
-            return _validate_mandatory_field(rule, values, classifications, ocr)
+            return _validate_mandatory_field(rule, values, configuration, classifications, ocr)
         if comparison_type == "Clausula_Minuta":
             return _validate_clause(rule, configuration, classifications, ocr)
         if comparison_type == "Poder_Catalogo":

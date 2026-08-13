@@ -194,11 +194,10 @@ class OCRTests(unittest.TestCase):
                     (
                         RegistroCampoObligatorio(
                             "Tipo_Documento",
+                            "CÉDULA DE CIUDADANÍA",
                             "cedula.pdf",
                             2,
-                            "CÉDULA DE CIUDADANÍA",
-                            "CÉDULA DE CIUDADANÍA",
-                            "Coincide",
+                            "Coincide con Escritura_Firma",
                         ),
                     ),
                 ),
@@ -234,6 +233,9 @@ class OCRTests(unittest.TestCase):
         self.assertIsInstance(payload["trazabilidad"]["inconsistencias"][0]["pagina"], int)
         self.assertEqual(payload["trazabilidad"]["inconsistencias"][0]["resultado"], "No coincide")
         self.assertEqual(payload["trazabilidad"]["campos_obligatorios"][0]["datos"], "Tipo_Documento")
+        self.assertEqual(payload["trazabilidad"]["campos_obligatorios"][0]["valor_encontrado"], "CÉDULA DE CIUDADANÍA")
+        self.assertEqual(payload["trazabilidad"]["campos_obligatorios"][0]["documento_validado"], "cedula.pdf")
+        self.assertEqual(payload["trazabilidad"]["campos_obligatorios"][0]["resultado"], "Coincide con Escritura_Firma")
         self.assertIsInstance(payload["trazabilidad"]["campos_obligatorios"][0]["pagina"], int)
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
@@ -284,14 +286,15 @@ class OCRTests(unittest.TestCase):
         self.assertIn("campos_obligatorios", interface)
         self.assertIn("mandatoryFieldsFromValidations", interface)
         self.assertIn("result.validacion?.reglas", interface)
-        self.assertIn("Datos", interface)
-        self.assertIn("Documento contrastado", interface)
+        self.assertIn("Documento validado", interface)
         self.assertIn("Página", interface)
-        self.assertIn("Valor esperado", interface)
         self.assertIn("Valor encontrado", interface)
         self.assertIn("Resultado", interface)
-        self.assertIn("Coincide", interface)
-        self.assertIn("No coincide", interface)
+        self.assertIn("Coincide con Escritura_Firma", interface)
+        self.assertIn("No coincide con Escritura_Firma", interface)
+        self.assertNotIn("Documento contrastado", interface)
+        self.assertNotIn("Valor esperado", interface)
+        self.assertIn("`${index + 1}. ${String(field.datos ?? 'No identificado')}`", interface)
         self.assertNotIn("Diferencias frente a Minuta_hipoteca", interface)
         self.assertIn("grid-template-columns: minmax(0, 3fr) minmax(0, 7fr)", interface)
         self.assertIn('id="system-status"', interface)

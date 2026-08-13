@@ -547,19 +547,21 @@
                     const comparison = comparisons[0] || {};
                     const comparedPage = Number(comparison.pagina_comparada);
                     const state = comparison.estado || rule.estado;
+                    const comparedDocument = visibleText(
+                        comparison.documento_comparado,
+                        'No identificado'
+                    ).replaceAll('\\', '/').split('/').pop();
                     return {
                         datos: visibleText(comparison.campo, rule.id_regla || 'No identificado'),
-                        documento_contrastado: visibleText(
-                            comparison.documento_comparado,
-                            'No identificado'
-                        ),
-                        pagina: Number.isInteger(comparedPage) && comparedPage > 0 ? comparedPage : 0,
                         valor_encontrado: visibleText(
-                            comparison.valor_encontrado,
+                            comparison.valor_esperado,
                             'No se encontró información'
                         ),
-                        valor_esperado: visibleText(comparison.valor_esperado, 'No disponible'),
-                        resultado: state === 'Cumple' ? 'Coincide' : 'No coincide'
+                        documento_validado: comparedDocument,
+                        pagina: Number.isInteger(comparedPage) && comparedPage > 0 ? comparedPage : 0,
+                        resultado: state === 'Cumple'
+                            ? 'Coincide con Escritura_Firma'
+                            : 'No coincide con Escritura_Firma'
                     };
                 });
         };
@@ -604,13 +606,11 @@
                 const page = Number.isInteger(field.pagina) ? field.pagina : 0;
                 lines.push(
                     index ? '' : null,
-                    `${index + 1}.`,
-                    `- Datos: ${String(field.datos ?? 'No identificado')}`,
-                    `- Documento contrastado: ${String(field.documento_contrastado ?? 'No identificado')}`,
-                    `- Página: ${page}`,
+                    `${index + 1}. ${String(field.datos ?? 'No identificado')}`,
                     `- Valor encontrado: ${String(field.valor_encontrado ?? 'No se encontró información')}`,
-                    `- Valor esperado: ${String(field.valor_esperado ?? 'No disponible')}`,
-                    `- Resultado: ${field.resultado === 'Coincide' ? 'Coincide' : 'No coincide'}`
+                    `- Documento validado: ${String(field.documento_validado ?? 'No identificado')}`,
+                    `- Página: ${page}`,
+                    `- Resultado: ${String(field.resultado ?? 'No coincide con Escritura_Firma')}`
                 );
             }
             showMessage(outputInfo, lines.filter(line => line !== null).join('\n'));

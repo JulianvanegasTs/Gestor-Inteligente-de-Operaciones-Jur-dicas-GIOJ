@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from Codigo.validacion import validate_expediente_data
+from Codigo.validacion import _documents_of_type, _matches_nearby, _matching_page, validate_expediente_data
 
 
 def _workbook(path: Path) -> None:
@@ -52,6 +52,28 @@ def _structured_workbook(path: Path) -> None:
 
 
 class ValidationTests(unittest.TestCase):
+    def test_accepts_architectural_document_names_with_connectors(self) -> None:
+        classifications = {"CEDULA JAVIER.pdf": "Documento de Identidad"}
+
+        self.assertEqual(
+            _documents_of_type(classifications, "Documento_Identidad"),
+            ("CEDULA JAVIER.pdf",),
+        )
+
+    def test_matches_formatted_identity_number_and_nearby_document_evidence(self) -> None:
+        pages = [{"pagina": 1, "texto": "DOCUMENTO DE IDENTIFICACIÓN: C.C. 91.292.114"}]
+
+        page, _text = _matching_page("91292114", pages)
+
+        self.assertEqual(page, 1)
+        self.assertTrue(_matches_nearby("Escritura Firma", "firma de esta escritura"))
+        self.assertFalse(
+            _matches_nearby(
+                "Escritura Firma",
+                "firma del registrador con abundante contenido intermedio que luego cita una escritura",
+            )
+        )
+
     def test_reads_each_rule_and_preserves_comparison_evidence(self) -> None:
         root = Path(tempfile.mkdtemp())
         (root / "Arquitectura").mkdir()

@@ -216,7 +216,7 @@ class LegalEngineTests(unittest.TestCase):
                         "pagina_validada": 5,
                         "documento_comparado": "cedula.pdf",
                         "pagina_comparada": 2,
-                        "valor_encontrado": ["CÉDULA DE CIUDADANÍA"],
+                        "valor_encontrado": ["Fragmento localizado en Escritura_Firma"],
                         "valor_esperado": "CÉDULA DE CIUDADANÍA",
                         "estado": "Cumple",
                     }],
@@ -228,12 +228,11 @@ class LegalEngineTests(unittest.TestCase):
         self.assertEqual(len(traceability.campos_obligatorios), 1)
         visible = traceability.campos_obligatorios[0]
         self.assertEqual(visible.datos, "Tipo_Documento")
-        self.assertEqual(visible.documento_contrastado, "cedula.pdf")
+        self.assertEqual(visible.documento_validado, "cedula.pdf")
         self.assertEqual(visible.pagina, 2)
         self.assertIsInstance(visible.pagina, int)
         self.assertEqual(visible.valor_encontrado, "CÉDULA DE CIUDADANÍA")
-        self.assertEqual(visible.valor_esperado, "CÉDULA DE CIUDADANÍA")
-        self.assertEqual(visible.resultado, "Coincide")
+        self.assertEqual(visible.resultado, "Coincide con Escritura_Firma")
 
     def test_conformity_uses_the_matching_current_alternative(self) -> None:
         root = _project()

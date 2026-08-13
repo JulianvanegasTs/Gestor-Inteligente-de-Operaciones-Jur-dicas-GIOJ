@@ -78,10 +78,9 @@ class RegistroCampoObligatorio:
     """Matriz visible de un dato obligatorio contrastado con Escritura_Firma."""
 
     datos: str
-    documento_contrastado: str
-    pagina: int
     valor_encontrado: str
-    valor_esperado: str
+    documento_validado: str
+    pagina: int
     resultado: str
 
 
@@ -392,6 +391,12 @@ def _compared_page(comparison: dict[str, Any]) -> int:
     return 0
 
 
+def _document_name(value: Any, fallback: str) -> str:
+    """Reduce la referencia trazable al nombre visible del documento original."""
+    document = _as_trace_text(value, fallback).replace("\\", "/")
+    return document.rsplit("/", 1)[-1]
+
+
 def _mandatory_field_traceability(
     fields: tuple[CampoExtraccion, ...],
     rules: tuple[ReglaNegocio, ...],
@@ -423,22 +428,22 @@ def _mandatory_field_traceability(
         records.append(
             RegistroCampoObligatorio(
                 datos=field.campo or field.id_campo,
-                documento_contrastado=_as_trace_text(
+                valor_encontrado=_as_trace_text(
+                    comparison.get("valor_esperado"),
+                    "No se encontró información",
+                ),
+                documento_validado=_document_name(
                     comparison.get("documento_comparado"),
                     _criterion(rule, "Documento_Comparado", "No identificado")
                     if rule
                     else "No identificado",
                 ),
                 pagina=_compared_page(comparison),
-                valor_encontrado=_as_trace_text(
-                    comparison.get("valor_encontrado"),
-                    "No se encontró información",
+                resultado=(
+                    "Coincide con Escritura_Firma"
+                    if validation_state == "Cumple"
+                    else "No coincide con Escritura_Firma"
                 ),
-                valor_esperado=_as_trace_text(
-                    comparison.get("valor_esperado"),
-                    "No disponible",
-                ),
-                resultado="Coincide" if validation_state == "Cumple" else "No coincide",
             )
         )
     return tuple(records)
