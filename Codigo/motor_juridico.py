@@ -10,6 +10,7 @@ from typing import Any
 
 from .clasificacion import _normalizar
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
+from .extraccion import CampoExtraccion, ExtractionError, load_extraction_fields
 from .validacion import ReglaNegocio, load_business_rules
 
 
@@ -73,10 +74,23 @@ class RegistroTrazabilidad:
 
 
 @dataclass(frozen=True)
+class RegistroCampoObligatorio:
+    """Matriz visible de un dato obligatorio contrastado con Escritura_Firma."""
+
+    datos: str
+    documento_contrastado: str
+    pagina: int
+    valor_encontrado: str
+    valor_esperado: str
+    resultado: str
+
+
+@dataclass(frozen=True)
 class ResultadoTrazabilidad:
     sintesis_dictamen: str
     registros: tuple[RegistroTrazabilidad, ...]
     inconsistencias: tuple[RegistroTrazabilidad, ...]
+    campos_obligatorios: tuple[RegistroCampoObligatorio, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -355,10 +369,86 @@ def _trace_field(rule: ReglaNegocio, comparison: dict[str, Any]) -> str:
     )
 
 
+def _criterion(rule: ReglaNegocio, name: str, fallback: str = "") -> str:
+    normalized_name = _normalizar(name)
+    return next(
+        (
+            value
+            for column, value in rule.criterios.items()
+            if _normalizar(column) == normalized_name
+        ),
+        fallback,
+    )
+
+
+def _compared_page(comparison: dict[str, Any]) -> int:
+    candidate = comparison.get("pagina_comparada")
+    if isinstance(candidate, bool):
+        return 0
+    if isinstance(candidate, (int, float)) and int(candidate) > 0:
+        return int(candidate)
+    if isinstance(candidate, str) and candidate.strip().isdigit() and int(candidate.strip()) > 0:
+        return int(candidate.strip())
+    return 0
+
+
+def _mandatory_field_traceability(
+    fields: tuple[CampoExtraccion, ...],
+    rules: tuple[ReglaNegocio, ...],
+    validations: dict[str, dict[str, Any]],
+) -> tuple[RegistroCampoObligatorio, ...]:
+    """Construye la matriz visible en el orden oficial de 01_Campos_Extraccion."""
+    mandatory_fields = tuple(
+        field for field in fields if _normalizar(field.obligatorio or "") == "si"
+    )
+    mandatory_rules = {
+        _criterion(rule, "ID_Campo_Clausula"): rule
+        for rule in rules
+        if _normalizar(rule.tipo_regla) in {"campo obligatorio", "campo_obligatorio"}
+        and _criterion(rule, "ID_Campo_Clausula")
+    }
+    records: list[RegistroCampoObligatorio] = []
+    for field in mandatory_fields:
+        rule = mandatory_rules.get(field.id_campo)
+        validation = validations.get(rule.id_regla, {}) if rule else {}
+        raw_comparisons = validation.get("comparaciones")
+        comparison = (
+            raw_comparisons[0]
+            if isinstance(raw_comparisons, list)
+            and raw_comparisons
+            and isinstance(raw_comparisons[0], dict)
+            else {}
+        )
+        validation_state = str(comparison.get("estado") or validation.get("estado") or "")
+        records.append(
+            RegistroCampoObligatorio(
+                datos=field.campo or field.id_campo,
+                documento_contrastado=_as_trace_text(
+                    comparison.get("documento_comparado"),
+                    _criterion(rule, "Documento_Comparado", "No identificado")
+                    if rule
+                    else "No identificado",
+                ),
+                pagina=_compared_page(comparison),
+                valor_encontrado=_as_trace_text(
+                    comparison.get("valor_encontrado"),
+                    "No se encontró información",
+                ),
+                valor_esperado=_as_trace_text(
+                    comparison.get("valor_esperado"),
+                    "No disponible",
+                ),
+                resultado="Coincide" if validation_state == "Cumple" else "No coincide",
+            )
+        )
+    return tuple(records)
+
+
 def _build_traceability(
     result: str,
     rules: tuple[ReglaNegocio, ...],
     validations: dict[str, dict[str, Any]],
+    fields: tuple[CampoExtraccion, ...] = (),
 ) -> ResultadoTrazabilidad:
     """Consolida todas las decisiones ya evidenciadas por las validaciones."""
     records: list[RegistroTrazabilidad] = []
@@ -412,7 +502,8 @@ def _build_traceability(
             "correspondencia. En mérito de lo expuesto, se propone dictamen de conformidad, sujeto "
             "a la revisión y al criterio profesional del analista jurídico."
         )
-    return ResultadoTrazabilidad(synthesis, tuple(records), inconsistencies)
+    mandatory_fields = _mandatory_field_traceability(fields, rules, validations)
+    return ResultadoTrazabilidad(synthesis, tuple(records), inconsistencies, mandatory_fields)
 
 
 def _logger(directory: Path) -> logging.Logger:
@@ -432,7 +523,8 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
     try:
         configuration = load_configuration(project_root)
         rules = load_business_rules(configuration)
-    except (ConfigurationError, ValueError) as error:
+        fields = load_extraction_fields(configuration)
+    except (ConfigurationError, ExtractionError, ValueError) as error:
         raise LegalEngineError(str(error)) from error
     source, validations = _load_validations(configuration, expediente_id, rules)
 
@@ -474,7 +566,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         sum(item.estado == "No aplica" for item in results_by_type),
     )
     concept = _legal_concept(result, validations)
-    traceability = _build_traceability(result, rules, validations)
+    traceability = _build_traceability(result, rules, validations, fields)
 
     target = _output_path(configuration, expediente_id)
     target.parent.mkdir(parents=True, exist_ok=True)

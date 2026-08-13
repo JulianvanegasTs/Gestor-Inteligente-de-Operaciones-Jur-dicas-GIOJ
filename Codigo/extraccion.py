@@ -235,6 +235,12 @@ def _read_extraction_architecture(configuration: ProjectConfiguration) -> tuple[
     return fields, instructions
 
 
+def load_extraction_fields(configuration: ProjectConfiguration) -> tuple[CampoExtraccion, ...]:
+    """Expone los campos oficiales ya validados de ``01_Campos_Extraccion``."""
+    fields, _instructions = _read_extraction_architecture(configuration)
+    return fields
+
+
 def _validate_extraction_architecture(
     fields: tuple[CampoExtraccion, ...],
     instructions: tuple[InstruccionExtraccion, ...],

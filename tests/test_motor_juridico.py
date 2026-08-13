@@ -15,42 +15,66 @@ from Codigo.motor_juridico import (
     _legal_concept,
     apply_legal_engine,
 )
+from Codigo.extraccion import CampoExtraccion
 from Codigo.validacion import ReglaNegocio
 
 
 def _workbook(path: Path) -> None:
-    rows = [
-        ["ID_Regla", "Tipo_Regla", "Apoderado", "Estado", "Fuente_Regla"],
-        ["REG-001", "Poder_Autorizado", "ANA PÉREZ", "Vigente", "Fuente oficial"],
-        ["REG-002", "Poder_Autorizado", "JUAN PÉREZ", "No_Autorizado", "Fuente oficial"],
-    ]
-    sheet_rows = []
-    for row_number, row in enumerate(rows, 1):
-        cells = "".join(
-            f'<c r="{chr(65 + column)}{row_number}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
-            for column, value in enumerate(row)
+    sheets = {
+        "01_Campos_Extraccion": [
+            ["ID_Campo", "Nivel", "Campo_Padre", "Entidad", "Campo", "Obligatorio"],
+            ["ENT-001", "Entidad", "", "Persona", "Persona", "No"],
+        ],
+        "04_Reglas_Negocio": [
+            ["ID_Regla", "Tipo_Regla", "Apoderado", "Estado", "Fuente_Regla"],
+            ["REG-001", "Poder_Autorizado", "ANA PÉREZ", "Vigente", "Fuente oficial"],
+            ["REG-002", "Poder_Autorizado", "JUAN PÉREZ", "No_Autorizado", "Fuente oficial"],
+        ],
+        "05_Extraccion_Documental": [
+            ["ID_Extraccion", "ID_Campo", "Documento_Origen"],
+            ["EXT-001", "ENT-001", "Escritura_Firma"],
+        ],
+    }
+
+    def sheet_xml(rows: list[list[str]]) -> str:
+        sheet_rows = []
+        for row_number, row in enumerate(rows, 1):
+            cells = "".join(
+                f'<c r="{chr(65 + column)}{row_number}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+                for column, value in enumerate(row)
+            )
+            sheet_rows.append(f'<row r="{row_number}">{cells}</row>')
+        return (
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            + "".join(sheet_rows)
+            + "</sheetData></worksheet>"
         )
-        sheet_rows.append(f'<row r="{row_number}">{cells}</row>')
+
     with zipfile.ZipFile(path, "w") as workbook:
         workbook.writestr(
             "xl/workbook.xml",
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            '<sheets><sheet name="04_Reglas_Negocio" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            '<sheets>'
+            + "".join(
+                f'<sheet name="{name}" sheetId="{index}" r:id="rId{index}"/>'
+                for index, name in enumerate(sheets, 1)
+            )
+            + "</sheets></workbook>",
         )
         workbook.writestr(
             "xl/_rels/workbook.xml.rels",
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" '
-            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
-            'Target="worksheets/sheet1.xml"/></Relationships>',
+            + "".join(
+                f'<Relationship Id="rId{index}" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+                f'Target="worksheets/sheet{index}.xml"/>'
+                for index in range(1, len(sheets) + 1)
+            )
+            + "</Relationships>",
         )
-        workbook.writestr(
-            "xl/worksheets/sheet1.xml",
-            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
-            + "".join(sheet_rows)
-            + "</sheetData></worksheet>",
-        )
+        for index, rows in enumerate(sheets.values(), 1):
+            workbook.writestr(f"xl/worksheets/sheet{index}.xml", sheet_xml(rows))
 
 
 def _project() -> Path:
@@ -66,7 +90,11 @@ def _project() -> Path:
                     "salida": "./Salida/",
                     "logs": "./Logs/",
                 },
-                "hojas": {"reglas": "04_Reglas_Negocio"},
+                "hojas": {
+                    "campos": "01_Campos_Extraccion",
+                    "reglas": "04_Reglas_Negocio",
+                    "extraccion": "05_Extraccion_Documental",
+                },
                 "validacion": {"archivo_salida": "validaciones.json"},
                 "motor_juridico": {"archivo_salida": "resultado_juridico.json"},
             }
@@ -151,6 +179,61 @@ class LegalEngineTests(unittest.TestCase):
         self.assertEqual(inconsistency.observacion, "El valor encontrado no coincide.")
         self.assertEqual(inconsistency.estado_validacion, "No cumple")
         self.assertIn("En mérito de lo expuesto", traceability.sintesis_dictamen)
+
+    def test_traceability_exposes_every_mandatory_field_with_compared_source_page(self) -> None:
+        field = CampoExtraccion(
+            "PER-001",
+            "Atributo",
+            "Persona",
+            "Persona",
+            "Tipo_Documento",
+            None,
+            "Texto",
+            None,
+            "No",
+            "Sí",
+            None,
+            "Sí",
+        )
+        rule = ReglaNegocio(
+            "OBL-PER-001",
+            "Campo_Obligatorio",
+            "01_Campos_Extraccion",
+            {
+                "ID_Campo_Clausula": "PER-001",
+                "Documento_Comparado": "Documento_Identidad",
+            },
+        )
+        traceability = _build_traceability(
+            "Conformidad",
+            (rule,),
+            {
+                "OBL-PER-001": {
+                    "estado": "Cumple",
+                    "comparaciones": [{
+                        "campo": "PER-001",
+                        "documento_validado": "escritura_firma.pdf",
+                        "pagina_validada": 5,
+                        "documento_comparado": "cedula.pdf",
+                        "pagina_comparada": 2,
+                        "valor_encontrado": ["CÉDULA DE CIUDADANÍA"],
+                        "valor_esperado": "CÉDULA DE CIUDADANÍA",
+                        "estado": "Cumple",
+                    }],
+                }
+            },
+            (field,),
+        )
+
+        self.assertEqual(len(traceability.campos_obligatorios), 1)
+        visible = traceability.campos_obligatorios[0]
+        self.assertEqual(visible.datos, "Tipo_Documento")
+        self.assertEqual(visible.documento_contrastado, "cedula.pdf")
+        self.assertEqual(visible.pagina, 2)
+        self.assertIsInstance(visible.pagina, int)
+        self.assertEqual(visible.valor_encontrado, "CÉDULA DE CIUDADANÍA")
+        self.assertEqual(visible.valor_esperado, "CÉDULA DE CIUDADANÍA")
+        self.assertEqual(visible.resultado, "Coincide")
 
     def test_conformity_uses_the_matching_current_alternative(self) -> None:
         root = _project()

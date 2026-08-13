@@ -55,7 +55,7 @@
         /* Layout Principal */
         .main-container {
             display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
+            grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
             gap: 24px;
             padding: 0 40px;
             margin-top: -35px; /* Superposición sobre el header */
@@ -481,7 +481,8 @@
 
     <!-- Pie de página -->
     <footer class="app-footer">
-        Estado del Sistema: Listo para procesar nuevos documentos | © 2026 Gestor Inteligente de Operaciones Jurídicas.
+        <span id="system-status">Estado del Sistema: Listo para procesar nuevos documentos</span>
+        | © 2026 Gestor Inteligente de Operaciones Jurídicas.
     </footer>
 
     <script>
@@ -500,6 +501,7 @@
         const progressPercent = document.getElementById('progress-percent');
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
+        const systemStatus = document.getElementById('system-status');
         let selectedSelectionId = '';
         let maxSelectionMb = 100;
         const analyzeButtonReadyText = 'INICIAR ANÁLISIS';
@@ -521,6 +523,10 @@
 
         const showMessage = (target, message) => {
             target.textContent = message;
+        };
+
+        const showSystemStatus = message => {
+            systemStatus.textContent = `Estado del Sistema: ${message}`;
         };
 
         const setAnalyzeButtonReady = () => {
@@ -549,26 +555,27 @@
         };
 
         const renderTraceability = result => {
-            const traceability = result.trazabilidad;
-            const inconsistencies = Array.isArray(traceability?.inconsistencias)
-                ? traceability.inconsistencias
+            const mandatoryFields = Array.isArray(result.trazabilidad?.campos_obligatorios)
+                ? result.trazabilidad.campos_obligatorios
                 : [];
-            const lines = [traceability?.sintesis_dictamen || result.detalle];
-            if (!inconsistencies.length) {
-                lines.push('', 'No se registraron inconsistencias.');
+            const lines = [];
+            if (!mandatoryFields.length) {
+                lines.push('No fue posible consolidar los campos obligatorios de la arquitectura.');
             }
-            for (const [index, inconsistency] of inconsistencies.entries()) {
-                const page = Number.isInteger(inconsistency.pagina) ? inconsistency.pagina : 0;
+            for (const [index, field] of mandatoryFields.entries()) {
+                const page = Number.isInteger(field.pagina) ? field.pagina : 0;
                 lines.push(
-                    '',
+                    index ? '' : null,
                     `${index + 1}.`,
+                    `- Datos: ${String(field.datos ?? 'No identificado')}`,
+                    `- Documento contrastado: ${String(field.documento_contrastado ?? 'No identificado')}`,
                     `- Página: ${page}`,
-                    `- Valor encontrado: ${String(inconsistency.valor_encontrado ?? 'No se encontró información')}`,
-                    `- Valor esperado: ${String(inconsistency.valor_esperado ?? 'No disponible')}`,
-                    `- Resultado: ${inconsistency.resultado === 'Coincide' ? 'Coincide' : 'No coincide'}`
+                    `- Valor encontrado: ${String(field.valor_encontrado ?? 'No se encontró información')}`,
+                    `- Valor esperado: ${String(field.valor_esperado ?? 'No disponible')}`,
+                    `- Resultado: ${field.resultado === 'Coincide' ? 'Coincide' : 'No coincide'}`
                 );
             }
-            showMessage(outputInfo, lines.join('\n'));
+            showMessage(outputInfo, lines.filter(line => line !== null).join('\n'));
             validationDetails.replaceChildren();
             validationDetails.hidden = true;
         };
@@ -678,8 +685,9 @@
             progressPercent.textContent = '0%';
             progressTrack.setAttribute('aria-valuenow', '0');
             progressStage.textContent = 'Preparando archivos seleccionados';
-            showMessage(outputSummary, 'Extracción documental en curso.');
-            showMessage(outputInfo, 'Preparando archivos seleccionados…');
+            showMessage(outputSummary, 'Concepto en curso');
+            showMessage(outputInfo, 'Validaciones en curso');
+            showSystemStatus('Preparando archivos seleccionados');
             const showProgress = async () => {
                 try {
                     const response = await fetch(
@@ -688,7 +696,7 @@
                     const progress = await response.json();
                     const documentName = progress.documento ? progress.documento.split('/').pop() : '';
                     const page = progress.pagina ? ` · Página ${progress.pagina}` : '';
-                    const location = documentName ? `\n${documentName}${page}` : '';
+                    const location = documentName ? ` ${documentName}${page}` : '';
                     const completed = Number(progress.completadas || 0);
                     const total = Number(progress.total || 0);
                     const completedState = progress.estado === 'completado';
@@ -699,12 +707,9 @@
                     progressPercent.textContent = `${percentage}%`;
                     progressTrack.setAttribute('aria-valuenow', String(percentage));
                     progressStage.textContent = progress.etapa || 'Validando documentación…';
-                    showMessage(
-                        outputInfo,
-                        `${progress.etapa || 'Validando documentación…'}${location}`
-                    );
+                    showSystemStatus(`${progress.etapa || 'Validando documentación…'}${location}`);
                 } catch (_error) {
-                    showMessage(outputInfo, 'Validando documentación…');
+                    showSystemStatus('Validando documentación…');
                 }
             };
             await new Promise(resolve => window.requestAnimationFrame(resolve));
@@ -720,12 +725,14 @@
                 progressPercent.textContent = '100%';
                 progressTrack.setAttribute('aria-valuenow', '100');
                 progressStage.textContent = 'Análisis completado';
+                showSystemStatus('Análisis completado');
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
                 showMessage(outputSummary, 'No fue posible extraer el texto documental.');
                 showMessage(outputInfo, message);
                 progressContainer.classList.add('is-error');
                 progressStage.textContent = 'El análisis terminó con error';
+                showSystemStatus('El análisis terminó con error');
             } finally {
                 window.clearInterval(progressTimer);
                 setAnalyzeButtonReady();

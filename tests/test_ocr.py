@@ -18,6 +18,7 @@ from Codigo.clasificacion import DocumentoClasificado, ResultadoClasificacion
 from Codigo.extraccion import ResultadoExtraccion
 from Codigo.expediente import DocumentoExpediente, create_selected_file
 from Codigo.motor_juridico import (
+    RegistroCampoObligatorio,
     RegistroTrazabilidad,
     ResultadoMotorJuridico,
     ResultadoTrazabilidad,
@@ -169,7 +170,21 @@ class OCRTests(unittest.TestCase):
                 "Salida/EXP-WEB/resultado_juridico.json",
                 ResumenMotorJuridico(0, 0, 0, 0, 0, 0, 0),
                 "Concepto jurídico.",
-                ResultadoTrazabilidad("Síntesis jurídica.", (trace_record,), (trace_record,)),
+                ResultadoTrazabilidad(
+                    "Síntesis jurídica.",
+                    (trace_record,),
+                    (trace_record,),
+                    (
+                        RegistroCampoObligatorio(
+                            "Tipo_Documento",
+                            "cedula.pdf",
+                            2,
+                            "CÉDULA DE CIUDADANÍA",
+                            "CÉDULA DE CIUDADANÍA",
+                            "Coincide",
+                        ),
+                    ),
+                ),
             )
             with (
                 patch("Codigo.ocr._extract_document", return_value=[extracted]),
@@ -201,6 +216,8 @@ class OCRTests(unittest.TestCase):
         self.assertEqual(payload["trazabilidad"]["sintesis_dictamen"], "Síntesis jurídica.")
         self.assertIsInstance(payload["trazabilidad"]["inconsistencias"][0]["pagina"], int)
         self.assertEqual(payload["trazabilidad"]["inconsistencias"][0]["resultado"], "No coincide")
+        self.assertEqual(payload["trazabilidad"]["campos_obligatorios"][0]["datos"], "Tipo_Documento")
+        self.assertIsInstance(payload["trazabilidad"]["campos_obligatorios"][0]["pagina"], int)
         output = json.loads((root / payload["ocr"]["archivo_salida"]).read_text(encoding="utf-8"))
         self.assertEqual(output["textos"][0]["documento"], extracted.documento)
         self.assertEqual(output["textos"][0]["pagina"], 1)
@@ -247,7 +264,9 @@ class OCRTests(unittest.TestCase):
         self.assertIn('id="validation-details"', interface)
         self.assertLess(interface.index("Validaciones realizadas:"), interface.index('id="output-info"'))
         self.assertIn("renderTraceability", interface)
-        self.assertIn("sintesis_dictamen", interface)
+        self.assertIn("campos_obligatorios", interface)
+        self.assertIn("Datos", interface)
+        self.assertIn("Documento contrastado", interface)
         self.assertIn("Página", interface)
         self.assertIn("Valor esperado", interface)
         self.assertIn("Valor encontrado", interface)
@@ -255,6 +274,11 @@ class OCRTests(unittest.TestCase):
         self.assertIn("Coincide", interface)
         self.assertIn("No coincide", interface)
         self.assertNotIn("Diferencias frente a Minuta_hipoteca", interface)
+        self.assertIn("grid-template-columns: minmax(0, 3fr) minmax(0, 7fr)", interface)
+        self.assertIn('id="system-status"', interface)
+        self.assertIn("showMessage(outputInfo, 'Validaciones en curso')", interface)
+        self.assertIn("showMessage(outputSummary, 'Concepto en curso')", interface)
+        self.assertNotIn("showMessage(\n                        outputInfo,\n                        `${progress.etapa", interface)
 
     def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
         tsv = (
