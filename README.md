@@ -316,8 +316,11 @@ El motor vuelve a leer todas las reglas de `04_Reglas_Negocio`, verifica que
 cada una tenga una validación y consolida los controles por `Tipo_Regla`. En
 los grupos estructurados todos los controles aplicables deben quedar
 validados; cualquier incumplimiento o ausencia de evidencia produce `No
-Conformidad`. El resultado incluye un `concepto_juridico` resumido y trazable
-para revisión profesional.
+Conformidad`. `CON-001` consolida únicamente las reglas bloqueantes vigentes:
+todas deben estar en `Cumple` o `No aplica`; cualquier `No cumple` o `No
+existe información` produce `No Conformidad`. El resultado siempre es
+preliminar. El `concepto_juridico` es conciso para Conformidad y detalla los
+hallazgos que requieren corrección para No Conformidad.
 
 El resultado se guarda en:
 
@@ -348,6 +351,20 @@ python -m unittest tests.test_motor_juridico -v
   y valor encontrado.
 - El resultado es una propuesta trazable para revisión del analista, no una
   sustitución de su criterio profesional.
+
+# Doble análisis y autorización humana
+
+Cada análisis crea `Salida/{id_seleccion}/revision_analista.json` con estado
+`Pendiente`. La interfaz presenta el resultado preliminar, el concepto y el
+listado completo de comprobaciones. El analista debe registrar una decisión:
+
+- `Confirmado` habilita la siguiente fase documental.
+- `Rechazado` exige una observación, mantiene bloqueada la generación y obliga
+  a corregir o ejecutar un nuevo análisis.
+- Un nuevo análisis restablece siempre el estado a `Pendiente`.
+
+El endpoint de generación comprueba esta autorización, pero la creación del
+Word y la conversión a PDF continúan reservadas para GIOJ-012 y GIOJ-013.
 
 ## Casos de regresión
 

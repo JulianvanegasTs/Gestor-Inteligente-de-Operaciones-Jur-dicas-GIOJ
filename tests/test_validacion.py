@@ -9,7 +9,15 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from Codigo.validacion import _documents_of_type, _matches_nearby, _matching_page, validate_expediente_data
+from Codigo.validacion import (
+    ReglaNegocio,
+    ResultadoValidacion,
+    _documents_of_type,
+    _matches_nearby,
+    _matching_page,
+    _validate_consolidation,
+    validate_expediente_data,
+)
 
 
 def _workbook(path: Path) -> None:
@@ -52,6 +60,53 @@ def _structured_workbook(path: Path) -> None:
 
 
 class ValidationTests(unittest.TestCase):
+    def test_consolidation_only_blocks_on_applicable_blocking_rules(self) -> None:
+        blocking = ReglaNegocio(
+            "REG-BLOQ", "Campo_Obligatorio", "Arquitectura.xlsx",
+            {"Severidad": "Bloqueante", "Estado": "Vigente"},
+        )
+        warning = ReglaNegocio(
+            "REG-ADV", "Calidad_Documental", "Arquitectura.xlsx",
+            {"Severidad": "Advertencia", "Estado": "Vigente"},
+        )
+        consolidation = ReglaNegocio(
+            "CON-001", "Consolidacion_Resultados", "Arquitectura.xlsx",
+            {"Tipo_Comparacion": "Consolidacion_Bloqueantes", "Severidad": "Bloqueante"},
+        )
+        completed = {
+            "REG-BLOQ": ResultadoValidacion("REG-BLOQ", "Campo_Obligatorio", "Arquitectura.xlsx", "Cumple", (), ""),
+            "REG-ADV": ResultadoValidacion("REG-ADV", "Calidad_Documental", "Arquitectura.xlsx", "No cumple", (), ""),
+        }
+
+        result = _validate_consolidation(
+            consolidation, (blocking, warning, consolidation), completed
+        )
+
+        self.assertEqual(result.estado, "Cumple")
+
+    def test_consolidation_rejects_missing_information_in_a_blocking_rule(self) -> None:
+        blocking = ReglaNegocio(
+            "REG-BLOQ", "Campo_Obligatorio", "Arquitectura.xlsx",
+            {"Severidad": "Bloqueante", "Estado": "Vigente"},
+        )
+        consolidation = ReglaNegocio(
+            "CON-001", "Consolidacion_Resultados", "Arquitectura.xlsx",
+            {"Tipo_Comparacion": "Consolidacion_Bloqueantes", "Severidad": "Bloqueante"},
+        )
+        completed = {
+            "REG-BLOQ": ResultadoValidacion(
+                "REG-BLOQ", "Campo_Obligatorio", "Arquitectura.xlsx",
+                "No existe información", (), "Falta evidencia.",
+            ),
+        }
+
+        result = _validate_consolidation(
+            consolidation, (blocking, consolidation), completed
+        )
+
+        self.assertEqual(result.estado, "No cumple")
+        self.assertIn("REG-BLOQ=No existe información", result.comparaciones[0].valor_encontrado)
+
     def test_accepts_architectural_document_names_with_connectors(self) -> None:
         classifications = {"CEDULA JAVIER.pdf": "Documento de Identidad"}
 

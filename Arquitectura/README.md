@@ -15,6 +15,12 @@ Los resultados derivados y la trazabilidad sí se guardan bajo `Salida/` con el
 identificador temporal de la selección. La barra de estado debe acompañar las
 fases de OCR, clasificación, extracción, normalización, validación y concepto.
 
+El resultado del motor jurídico es preliminar. La interfaz debe mostrar el
+concepto y todas las validaciones, registrar una segunda revisión humana con
+estado `Pendiente`, `Confirmado` o `Rechazado`, y bloquear la generación
+documental salvo cuando el analista confirme expresamente el análisis. Cada
+nuevo análisis restablece la revisión a `Pendiente`.
+
 Los casos ubicados fuera del proyecto, incluidos los de `GIOJ_PRUEBAS`, son
 material de consulta. No son una ruta configurada ni una entrada del motor de
 análisis.
@@ -44,6 +50,8 @@ Contiene:
 - Trazabilidad
 - Marcadores
 - Formateadores
+- Regla de consolidación del resultado preliminar
+- Estado y trazabilidad de la revisión del analista
 
 config.json
 

@@ -377,6 +377,56 @@
             transform: translateY(-1px);
         }
 
+        .btn-generate-doc:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+        }
+
+        .review-panel {
+            display: grid;
+            gap: 10px;
+            padding: 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+
+        .review-panel[hidden] { display: none; }
+
+        .review-status {
+            color: #1e3a5f;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .review-observation {
+            min-height: 72px;
+            padding: 10px;
+            border: 1px solid #94a3b8;
+            border-radius: 8px;
+            resize: vertical;
+            font: inherit;
+        }
+
+        .review-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-review {
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .btn-review-confirm { background: #15803d; }
+        .btn-review-reject { background: #b91c1c; }
+
         /* Footer */
         .app-footer {
             text-align: center;
@@ -454,7 +504,7 @@
         <!-- Sección Derecha: Resultados -->
         <section class="card results-section">
             
-            <h2 class="section-title">Concepto jurídico generado:</h2>
+            <h2 class="section-title">Concepto jurídico de apoyo:</h2>
             
             <div class="text-output-box box-summary" id="output-summary">
                 <div class="placeholder-line w-100"></div>
@@ -472,7 +522,20 @@
 
             <div class="validation-details" id="validation-details" hidden></div>
 
-            <button class="btn-generate-doc" id="btn-generate">
+            <div class="review-panel" id="review-panel" hidden>
+                <div class="review-status" id="review-status">Revisión del analista: Pendiente</div>
+                <textarea
+                    class="review-observation"
+                    id="review-observation"
+                    placeholder="Observación del analista (obligatoria al rechazar)"
+                ></textarea>
+                <div class="review-actions">
+                    <button class="btn-review btn-review-confirm" id="btn-review-confirm">CONFIRMAR ANÁLISIS</button>
+                    <button class="btn-review btn-review-reject" id="btn-review-reject">RECHAZAR ANÁLISIS</button>
+                </div>
+            </div>
+
+            <button class="btn-generate-doc" id="btn-generate" disabled aria-disabled="true">
                 📄 Generar Documento
             </button>
         </section>
@@ -490,6 +553,11 @@
         const fileInput = document.getElementById('file-input');
         const btnAnalyze = document.getElementById('btn-analyze');
         const btnGenerate = document.getElementById('btn-generate');
+        const reviewPanel = document.getElementById('review-panel');
+        const reviewStatus = document.getElementById('review-status');
+        const reviewObservation = document.getElementById('review-observation');
+        const btnReviewConfirm = document.getElementById('btn-review-confirm');
+        const btnReviewReject = document.getElementById('btn-review-reject');
         const fileList = document.getElementById('file-list');
         const dropzoneStatus = document.querySelector('.dropzone-status');
         const actionHint = document.querySelector('.action-hint');
@@ -503,6 +571,7 @@
         const progressFill = document.getElementById('progress-fill');
         const systemStatus = document.getElementById('system-status');
         let selectedSelectionId = '';
+        let preliminaryResult = '';
         let maxSelectionMb = 100;
         const analyzeButtonReadyText = 'INICIAR ANÁLISIS';
         const analyzeButtonPreparingText = 'PREPARANDO ARCHIVOS';
@@ -527,6 +596,23 @@
 
         const showSystemStatus = message => {
             systemStatus.textContent = `Estado del Sistema: ${message}`;
+        };
+
+        const setReviewState = review => {
+            const state = review?.estado || 'Pendiente';
+            preliminaryResult = review?.resultado_preliminar || preliminaryResult;
+            reviewPanel.hidden = false;
+            reviewStatus.textContent = `Resultado preliminar: ${preliminaryResult || 'No disponible'} · Revisión del analista: ${state}`;
+            btnGenerate.disabled = state !== 'Confirmado';
+            btnGenerate.setAttribute('aria-disabled', String(btnGenerate.disabled));
+        };
+
+        const resetReview = () => {
+            preliminaryResult = '';
+            reviewObservation.value = '';
+            reviewPanel.hidden = true;
+            btnGenerate.disabled = true;
+            btnGenerate.setAttribute('aria-disabled', 'true');
         };
 
         const visibleText = (value, fallback) => {
@@ -592,25 +678,25 @@
         };
 
         const renderTraceability = result => {
-            const architecturalFields = Array.isArray(result.trazabilidad?.campos_obligatorios)
-                ? result.trazabilidad.campos_obligatorios
-                : [];
-            const mandatoryFields = architecturalFields.length
-                ? architecturalFields
-                : mandatoryFieldsFromValidations(result);
+            const rules = Array.isArray(result.validacion?.reglas) ? result.validacion.reglas : [];
             const lines = [];
-            if (!mandatoryFields.length) {
-                lines.push('No se registraron validaciones de campos obligatorios.');
+            if (!rules.length) {
+                lines.push('No se registraron validaciones.');
             }
-            for (const [index, field] of mandatoryFields.entries()) {
-                const page = Number.isInteger(field.pagina) ? field.pagina : 0;
+            for (const [index, rule] of rules.entries()) {
+                const comparison = Array.isArray(rule.comparaciones) ? (rule.comparaciones[0] || {}) : {};
+                const page = Number(comparison.pagina_validada || comparison.pagina_origen?.[0] || 0);
+                const documentName = visibleText(
+                    comparison.documento_validado || comparison.documento_origen,
+                    'No identificado'
+                ).replaceAll('\\', '/').split('/').pop();
                 lines.push(
                     index ? '' : null,
-                    `${index + 1}. ${String(field.datos ?? 'No identificado')}`,
-                    `- Valor encontrado: ${String(field.valor_encontrado ?? 'No se encontró información')}`,
-                    `- Documento validado: ${String(field.documento_validado ?? 'No identificado')}`,
-                    `- Página: ${page}`,
-                    `- Resultado: ${String(field.resultado ?? 'No coincide con Escritura_Firma')}`
+                    `${index + 1}. ${visibleText(rule.id_regla, 'Regla no identificada')} · ${visibleText(rule.estado, 'Sin estado')}`,
+                    `- Tipo: ${visibleText(rule.tipo_regla, 'No identificado')}`,
+                    `- Documento: ${documentName}`,
+                    `- Página: ${Number.isFinite(page) ? page : 0}`,
+                    `- Observación: ${visibleText(rule.observacion || comparison.observacion, 'Sin observación')}`
                 );
             }
             showMessage(outputInfo, lines.filter(line => line !== null).join('\n'));
@@ -632,6 +718,7 @@
 
         const showSelectionError = message => {
             selectedSelectionId = '';
+            resetReview();
             setAnalyzeButtonReady();
             progressContainer.hidden = false;
             progressContainer.classList.add('is-error');
@@ -657,6 +744,7 @@
                 actionHint.textContent = '(Puede elegir archivos desde cualquier carpeta)';
                 progressContainer.classList.remove('is-error');
                 if (!selectedSelectionId) {
+                    resetReview();
                     progressContainer.hidden = true;
                     showMessage(outputSummary, '');
                     showMessage(outputInfo, '');
@@ -694,6 +782,7 @@
                     throw new Error(result.error || 'La selección de archivos no es válida.');
                 }
                 selectedSelectionId = result.seleccion.id;
+                resetReview();
                 renderDocuments(result.seleccion.documentos);
                 dropzoneStatus.textContent = `${result.seleccion.documentos.length} archivo(s) listo(s) para análisis.`;
                 actionHint.textContent = '';
@@ -714,6 +803,7 @@
                 showSelectionError('Use “Seleccionar archivos” antes de iniciar el análisis.');
                 return;
             }
+            resetReview();
             btnAnalyze.disabled = true;
             btnAnalyze.textContent = 'ANALIZANDO…';
             btnAnalyze.setAttribute('aria-busy', 'true');
@@ -759,11 +849,13 @@
                 }
                 showMessage(outputSummary, result.motor_juridico?.concepto_juridico || result.mensaje);
                 renderTraceability(result);
+                preliminaryResult = result.motor_juridico?.resultado_preliminar || '';
+                setReviewState(result.revision_analista);
                 progressFill.style.width = '100%';
                 progressPercent.textContent = '100%';
                 progressTrack.setAttribute('aria-valuenow', '100');
                 progressStage.textContent = 'Análisis completado';
-                showSystemStatus('Análisis completado');
+                showSystemStatus('Análisis preliminar completado; pendiente de revisión humana');
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
                 showMessage(outputSummary, 'No fue posible extraer el texto documental.');
@@ -777,10 +869,34 @@
             }
         });
 
+        const submitReview = async decision => {
+            if (!selectedSelectionId) {
+                showSystemStatus('No existe un análisis para revisar');
+                return;
+            }
+            const result = await request('/api/revision/analista', {
+                id_expediente: selectedSelectionId,
+                decision,
+                observacion: reviewObservation.value
+            });
+            if (result.error) {
+                reviewStatus.textContent = result.error;
+                showSystemStatus(result.error);
+                return;
+            }
+            setReviewState(result.revision_analista);
+            showSystemStatus(result.mensaje);
+        };
+
+        btnReviewConfirm.addEventListener('click', () => submitReview('Confirmado'));
+        btnReviewReject.addEventListener('click', () => submitReview('Rechazado'));
+
         btnGenerate.addEventListener('click', async () => {
-            const result = await request('/api/documento/generar');
-            showMessage(outputSummary, result.mensaje);
-            showMessage(outputInfo, result.detalle);
+            const result = await request('/api/documento/generar', {
+                id_expediente: selectedSelectionId
+            });
+            showMessage(outputSummary, result.mensaje || 'No fue posible continuar con la generación.');
+            showMessage(outputInfo, result.detalle || result.error || 'Revise la autorización del analista.');
         });
     </script>
 </body>

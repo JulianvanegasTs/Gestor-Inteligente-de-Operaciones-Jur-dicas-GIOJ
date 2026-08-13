@@ -669,6 +669,64 @@ def _validate(
     return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, comparisons, observation)
 
 
+def _is_consolidation_rule(rule: ReglaNegocio) -> bool:
+    return _criterion(rule, "Tipo_Comparacion") == "Consolidacion_Bloqueantes"
+
+
+def _validate_consolidation(
+    rule: ReglaNegocio,
+    rules: tuple[ReglaNegocio, ...],
+    completed: dict[str, ResultadoValidacion],
+) -> ResultadoValidacion:
+    """Aplica CON-001 a todas las reglas bloqueantes ya evaluadas."""
+    blocking_rules = tuple(
+        item
+        for item in rules
+        if item.id_regla != rule.id_regla
+        and not _is_consolidation_rule(item)
+        and _normalizar(_criterion(item, "Severidad")) == "bloqueante"
+        and _normalizar(_criterion(item, "Estado", "Vigente")) == "vigente"
+    )
+    states = {item.id_regla: completed[item.id_regla].estado for item in blocking_rules}
+    adverse = tuple(
+        rule_id
+        for rule_id, state in states.items()
+        if state in {"No cumple", "No existe información"}
+    )
+    state = "No cumple" if adverse else "Cumple"
+    found = (
+        ", ".join(f"{rule_id}={states[rule_id]}" for rule_id in adverse)
+        if adverse
+        else f"{len(states)} regla(s) bloqueante(s) en Cumple o No aplica"
+    )
+    observation = (
+        "Existe al menos una regla bloqueante adversa o sin evidencia suficiente; "
+        "el resultado preliminar es No Conformidad."
+        if adverse
+        else "Todas las reglas bloqueantes aplicables cumplen o no aplican; "
+        "el resultado preliminar es Conformidad."
+    )
+    comparison = _trace_comparison(
+        "Resultado_Preliminar",
+        "Todas las reglas bloqueantes aplicables en Cumple o No aplica",
+        found,
+        "Todas_Validaciones",
+        None,
+        "04_Reglas_Negocio",
+        None,
+        state,
+        observation,
+    )
+    return ResultadoValidacion(
+        rule.id_regla,
+        rule.tipo_regla,
+        rule.fuente_regla,
+        state,
+        (comparison,),
+        observation,
+    )
+
+
 def _logger(directory: Path) -> logging.Logger:
     directory.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(f"gioj.validacion.{directory.resolve()}")
@@ -692,7 +750,16 @@ def validate_expediente_data(project_root: Path, expediente_id: str) -> Resultad
     classifications = _classification_index(_load_result(configuration, expediente_id, "clasificacion_documental.json"))
     ocr_filename = str(configuration.values.get("ocr", {}).get("archivo_salida", "texto_extraido.json"))
     ocr = _load_result(configuration, expediente_id, ocr_filename)
-    validations = tuple(_validate(rule, values, configuration, classifications, ocr) for rule in rules)
+    completed: dict[str, ResultadoValidacion] = {}
+    for rule in rules:
+        if not _is_consolidation_rule(rule):
+            completed[rule.id_regla] = _validate(
+                rule, values, configuration, classifications, ocr
+            )
+    for rule in rules:
+        if _is_consolidation_rule(rule):
+            completed[rule.id_regla] = _validate_consolidation(rule, rules, completed)
+    validations = tuple(completed[rule.id_regla] for rule in rules)
     summary = ResumenValidacion(len(rules), len(validations), sum(item.estado == "Cumple" for item in validations), sum(item.estado == "No cumple" for item in validations), sum(item.estado == "No existe información" for item in validations), sum(item.estado == "No aplica" for item in validations))
     target = _path(configuration, expediente_id)
     target.parent.mkdir(parents=True, exist_ok=True)

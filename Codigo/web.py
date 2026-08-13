@@ -25,6 +25,13 @@ from .expediente import ArchivoSeleccionado, ExpedienteError, create_selected_fi
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_files_text
+from .revision_analista import (
+    AnalystReviewError,
+    authorize_document_generation,
+    initialize_analyst_review,
+    load_analyst_review,
+    record_analyst_review,
+)
 from .validacion import ValidationError, validate_expediente_data
 
 
@@ -244,6 +251,15 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     state = dict(analysis_states.get(expediente_id, {"estado": "sin_iniciar"}))
                 self._send_json(HTTPStatus.OK, state)
                 return
+            if parsed.path == "/api/revision/analista":
+                expediente_id = parse_qs(parsed.query).get("id_expediente", [""])[0]
+                try:
+                    review = load_analyst_review(project_root, expediente_id)
+                except AnalystReviewError as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                self._send_json(HTTPStatus.OK, {"revision_analista": asdict(review)})
+                return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
 
         def do_POST(self) -> None:  # noqa: N802
@@ -430,6 +446,14 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     update_analysis_state(expediente_id, estado="error", etapa=str(error))
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                     return
+                try:
+                    analyst_review = initialize_analyst_review(
+                        project_root, expediente_id, legal_result.resultado
+                    )
+                except AnalystReviewError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
                 update_analysis_state(
                     expediente_id,
                     estado="completado",
@@ -442,11 +466,12 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     archivo_normalizacion=normalization.archivo_salida,
                     archivo_validaciones=validation.archivo_salida,
                     archivo_resultado_juridico=legal_result.archivo_salida,
-                    resultado_juridico=legal_result.resultado,
+                    resultado_preliminar=legal_result.resultado,
+                    estado_revision_analista=analyst_review.estado,
                     errores=len(result.errores),
                 )
                 self._send_json(HTTPStatus.OK, {
-                    "mensaje": f"Resultado jurídico: {legal_result.resultado}.",
+                    "mensaje": f"Resultado jurídico preliminar: {legal_result.resultado}.",
                     "detalle": (
                         f"{len(result.textos)} página(s) procesada(s), {len(result.errores)} error(es). "
                         f"Clasificación: {classification.archivo_salida}. "
@@ -495,6 +520,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     "motor_juridico": {
                         "archivo_salida": legal_result.archivo_salida,
                         "resultado": legal_result.resultado,
+                        "resultado_preliminar": legal_result.resultado,
                         "concepto_juridico": legal_result.concepto_juridico,
                         "resumen": asdict(legal_result.resumen),
                         "observaciones": [asdict(item) for item in legal_result.observaciones],
@@ -504,14 +530,46 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         if legal_result.trazabilidad is not None
                         else None
                     ),
+                    "revision_analista": asdict(analyst_review),
                 })
                 return
-            pending = {
-                "/api/documento/generar": ("Generación pendiente.", "La generación documental se implementará en GIOJ-012 y GIOJ-013."),
-            }
-            if self.path in pending:
-                message, detail = pending[self.path]
-                self._send_json(HTTPStatus.CONFLICT, {"mensaje": message, "detalle": detail})
+            if self.path == "/api/revision/analista":
+                expediente_id = payload.get("id_expediente")
+                decision = payload.get("decision")
+                observation = payload.get("observacion", "")
+                if not all(isinstance(item, str) for item in (expediente_id, decision, observation)):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "La revisión contiene datos inválidos"})
+                    return
+                try:
+                    review = record_analyst_review(
+                        project_root, expediente_id, decision, observation
+                    )
+                except AnalystReviewError as error:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                self._send_json(HTTPStatus.OK, {
+                    "mensaje": f"Análisis {review.estado.lower()} por el analista.",
+                    "revision_analista": asdict(review),
+                })
+                return
+            if self.path == "/api/documento/generar":
+                expediente_id = payload.get("id_expediente")
+                if not isinstance(expediente_id, str):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "El expediente es obligatorio"})
+                    return
+                try:
+                    authorization = authorize_document_generation(project_root, expediente_id)
+                except AnalystReviewError as error:
+                    self._send_json(HTTPStatus.CONFLICT, {"error": str(error)})
+                    return
+                self._send_json(HTTPStatus.CONFLICT, {
+                    "mensaje": "Generación documental autorizada y pendiente.",
+                    "detalle": (
+                        "La revisión humana permite continuar con la plantilla oficial, pero la creación "
+                        "Word/PDF corresponde a GIOJ-012 y GIOJ-013."
+                    ),
+                    "autorizacion": asdict(authorization),
+                })
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})
 

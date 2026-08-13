@@ -370,6 +370,22 @@ No avanzar hasta validar la tarea actual.
 
 ---
 
+# Cierre obligatorio de cada ciclo de mejora
+
+Una vez finalizado cada ciclo de mejora, se deben revisar y ajustar los archivos de `Arquitectura/` para que reflejen el diseño y el funcionamiento aprobado del proyecto.
+
+Esta actualización debe realizarse antes de iniciar el ciclo siguiente, con el fin de:
+
+- Evitar que ciclos posteriores contradigan o reviertan mejoras ya implementadas.
+- Mantener alineados el código, la configuración, la documentación y `Arquitectura.xlsx`.
+- Garantizar que el siguiente ciclo parta de la fuente funcional vigente, dado que los archivos de arquitectura se leen antes de comenzar su ejecución.
+
+La actualización de archivos protegidos, incluido `Arquitectura.xlsx`, sigue requiriendo la autorización correspondiente y debe quedar documentada en el control de cambios.
+
+No se podrá cerrar un ciclo ni iniciar el siguiente mientras esta alineación no haya sido verificada.
+
+---
+
 # Criterios antes de cerrar una tarea
 
 Cada tarea debe cumplir:

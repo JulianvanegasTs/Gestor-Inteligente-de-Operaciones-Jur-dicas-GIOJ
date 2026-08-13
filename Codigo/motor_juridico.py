@@ -307,17 +307,28 @@ def _evaluate_type(
 
 
 def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
-    failed = [item for item in validations.values() if item.get("estado") in {"No cumple", "No existe información"}]
+    failed = [
+        item
+        for rule_id, item in validations.items()
+        if rule_id != "CON-001"
+        and item.get("estado") in {"No cumple", "No existe información"}
+    ]
     if not failed:
         return (
             "El expediente fue validado contra los campos obligatorios, la estructura de Minuta_hipoteca y "
             "las reglas de poderes aplicables. No se identificaron hallazgos que impidan la conformidad. "
-            "El resultado es una propuesta para revisión del analista jurídico."
+            "El resultado preliminar es Conformidad y queda pendiente de confirmación por el analista jurídico."
         )
+    details = " ".join(
+        f"{index}. {item.get('id_regla', 'Regla no identificada')} ({item.get('estado')}): "
+        f"{item.get('observacion') or 'requiere revisión de la evidencia registrada.'}"
+        for index, item in enumerate(failed, 1)
+    )
     return (
-        f"El análisis concluye {result} al registrar {len(failed)} validación(es) adversa(s) "
-        "o sin evidencia suficiente. El resultado constituye una propuesta para revisión del "
-        "analista jurídico y no reemplaza su criterio profesional."
+        f"El análisis concluye {result} preliminar al registrar {len(failed)} validación(es) "
+        f"adversa(s) o sin evidencia suficiente. Hallazgos que requieren corrección: {details} "
+        "El analista jurídico debe revisar la evidencia, confirmar o rechazar el análisis y su "
+        "decisión no puede ser sustituida por este concepto."
     )
 
 
@@ -543,9 +554,14 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         )
         for rule_type in types
     )
+    consolidation = validations.get("CON-001")
     result = (
         "Conformidad"
-        if all(item.estado in {"Cumple", "No aplica"} for item in results_by_type)
+        if (
+            consolidation.get("estado") == "Cumple"
+            if consolidation is not None
+            else all(item.estado in {"Cumple", "No aplica"} for item in results_by_type)
+        )
         else "No Conformidad"
     )
     observations = tuple(
@@ -586,6 +602,9 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
                 "origen_reglas": str(configuration.values["hojas"]["reglas"]),
                 "origen_validaciones": source.relative_to(configuration.project_root).as_posix(),
                 "resultado": result,
+                "resultado_preliminar": result,
+                "estado_revision_analista": "Pendiente",
+                "generacion_habilitada": False,
                 "concepto_juridico": concept,
                 "evaluaciones_reglas": [asdict(item) for item in evaluations],
                 "resultados_por_tipo": [asdict(item) for item in results_by_type],
@@ -609,7 +628,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
             item.pagina,
             item.documento,
         )
-    logger.info("MOTOR JURIDICO COMPLETADO | %s | %s", expediente_id, result)
+    logger.info("MOTOR JURIDICO COMPLETADO | %s | resultado_preliminar=%s", expediente_id, result)
     return ResultadoMotorJuridico(
         expediente_id,
         result,
