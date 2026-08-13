@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -170,12 +171,10 @@ def _run_tesseract_bytes(
     return text, round(mean(values), 2) if values else None
 
 
-def _render_pdf_page_bytes(content: bytes, page_number: int, resolution: int) -> bytes:
-    """Renderiza una página PDF directamente desde memoria."""
-    try:
-        import pypdfium2 as pdfium
-    except ImportError as error:
-        raise OCRExtractionError("Falta la dependencia pypdfium2 para procesar PDF escaneados en memoria") from error
+def _render_pdfium_page_bytes(content: bytes, page_number: int, resolution: int) -> bytes:
+    """Renderiza con PDFium cuando la dependencia está disponible."""
+    import pypdfium2 as pdfium
+
     try:
         document = pdfium.PdfDocument(content)
         page = document[page_number - 1]
@@ -188,8 +187,66 @@ def _render_pdf_page_bytes(content: bytes, page_number: int, resolution: int) ->
         raise OCRExtractionError(f"No fue posible renderizar la página PDF en memoria: {error}") from error
 
 
+def _configured_executable(command: str) -> str | None:
+    """Resuelve el comando configurado y prefiere un ejecutable nativo en PATH."""
+    resolved = shutil.which(command)
+    if resolved and Path(resolved).suffix.casefold() == ".exe":
+        return resolved
+    if not Path(command).suffix:
+        for directory in os.get_exec_path():
+            candidate = Path(directory) / f"{command}.exe"
+            if candidate.is_file():
+                return str(candidate)
+    return resolved
+
+
+def _render_pdf_page_bytes(
+    content: bytes,
+    page_number: int,
+    resolution: int,
+    command: str = "pdftoppm",
+) -> bytes:
+    """Renderiza desde memoria con PDFium o el renderizador configurado."""
+    try:
+        return _render_pdfium_page_bytes(content, page_number, resolution)
+    except ImportError:
+        executable = _configured_executable(command)
+        if executable is None:
+            raise OCRExtractionError(
+                f"No se encontró el renderizador PDF configurado: {command}"
+            )
+        try:
+            result = subprocess.run(
+                [
+                    executable,
+                    "-f",
+                    str(page_number),
+                    "-l",
+                    str(page_number),
+                    "-singlefile",
+                    "-r",
+                    str(resolution),
+                    "-png",
+                    "-",
+                ],
+                input=content,
+                check=True,
+                capture_output=True,
+            )
+        except OSError as error:
+            raise OCRExtractionError(f"El renderizador PDF no pudo iniciarse: {error}") from error
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or b"").decode("utf-8", errors="replace").strip()
+            raise OCRExtractionError(
+                f"No fue posible renderizar la página PDF en memoria: {detail or error.returncode}"
+            ) from error
+        if not result.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise OCRExtractionError("El renderizador PDF no produjo una imagen PNG válida")
+        return result.stdout
+
+
 def _render_pdf_page(path: Path, page_number: int, command: str, resolution: int) -> Path:
-    executable = shutil.which(command)
+    executable = _configured_executable(command)
     if executable is None:
         raise OCRExtractionError(f"No se encontró el renderizador PDF configurado: {command}")
     temporary_directory = Path(tempfile.mkdtemp(prefix="gioj-ocr-"))
@@ -292,6 +349,7 @@ def _extract_memory_document(
     include_confidence = bool(_ocr_setting(configuration, "registrar_confianza", True))
     language = str(_ocr_setting(configuration, "idioma", "spa"))
     tesseract = str(_ocr_setting(configuration, "comando_tesseract", "tesseract"))
+    renderer = str(_ocr_setting(configuration, "comando_renderizador_pdf", "pdftoppm"))
     if document.categoria == "PDF":
         try:
             from pypdf import PdfReader
@@ -315,7 +373,10 @@ def _extract_memory_document(
             if not bool(_ocr_setting(configuration, "permitir_pdf_escaneado", True)):
                 raise OCRExtractionError("El OCR de PDF escaneados está deshabilitado en la configuración")
             image_content = _render_pdf_page_bytes(
-                content, number, int(_ocr_setting(configuration, "resolucion_pdf", 300))
+                content,
+                number,
+                int(_ocr_setting(configuration, "resolucion_pdf", 300)),
+                renderer,
             )
             ocr_text, confidence = _run_tesseract_bytes(
                 image_content, language, tesseract, include_confidence

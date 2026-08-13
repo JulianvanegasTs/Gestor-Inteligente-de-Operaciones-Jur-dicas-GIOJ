@@ -111,6 +111,74 @@ def _write_analysis_inputs(
 
 
 class ExtractionTests(unittest.TestCase):
+    def test_identity_document_maps_reverse_labels_catalog_and_noisy_number(self) -> None:
+        sheets = {
+            "01_Campos_Extraccion": [
+                FIELD_HEADER,
+                ["PER-001", "Entidad", "", "Persona", "Intervinientes", "Personas", "Lista_Objeto", "", "Sí", "No", "", ""],
+                ["PER-002", "Atributo", "Intervinientes", "Persona", "Nombre", "Nombre completo del interviniente.", "Texto", "", "No", "Sí", "", "Si"],
+                ["PER-003", "Atributo", "Intervinientes", "Persona", "Tipo_Documento", "Tipo de identificación.", "Enumerado", "Tipo_Documento", "No", "Sí", "", "Si"],
+                ["PER-004", "Atributo", "Intervinientes", "Persona", "Numero_Documento", "Número de identificación.", "Texto", "", "No", "Sí", "", "Si"],
+            ],
+            "03_Catalogos": [
+                ["Catalogo", "Codigo", "Valor", "Activo", "Observaciones"],
+                ["Tipo_Documento", "TD_CC", "Cédula de ciudadanía", "1", ""],
+                ["Tipo_Documento", "TD_CE", "Cédula de extranjería", "1", ""],
+            ],
+            "05_Extraccion_Documental": [
+                INSTRUCTION_HEADER,
+                ["EXT-006", "PER-002", "1", "Documento_Identidad", "Extraer nombre completo.", "", "Sí", "Sí", "Intervinientes[].Nombre", ""],
+                ["EXT-007", "PER-003", "1", "Documento_Identidad", "Extraer tipo documental.", "", "Sí", "Sí", "Intervinientes[].Tipo_Documento", ""],
+                ["EXT-008", "PER-004", "1", "Documento_Identidad", "Extraer número documental.", "", "Sí", "Sí", "Intervinientes[].Numero_Documento", ""],
+            ],
+        }
+        root = create_project(sheets)
+        config_path = root / "Arquitectura" / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["hojas"]["catalogos"] = "03_Catalogos"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        document = "CEDULA JAVIER.pdf"
+        _write_analysis_inputs(
+            root,
+            "EXP-ID",
+            [{
+                "documento": document,
+                "pagina": 1,
+                "texto": (
+                    "CEDULA DE CIUDADANIA\n"
+                    "nuveño 91,292,114\n"
+                    "GARCIA CARVAJAL\n"
+                    "APELLIDOS\n"
+                    "JAVIER ALFONSO\n"
+                    "NOMBRES\n"
+                    "FIRMA"
+                ),
+                "metodo": "OCR PDF escaneado",
+                "confianza": 81.38,
+            }],
+            [{
+                "documento": document,
+                "tipo_documental": "Documento de Identidad",
+                "codigo_tipo_documental": "DOC_ID",
+            }],
+        )
+
+        result = extract_expediente_data(root, "EXP-ID")
+        values = {
+            item.campo.id_campo: item.valores[0].valor_encontrado
+            for item in result.campos
+            if item.valores
+        }
+
+        self.assertEqual(values["PER-002"], "JAVIER ALFONSO GARCIA CARVAJAL")
+        self.assertEqual(values["PER-003"], "Cédula de ciudadanía")
+        self.assertEqual(values["PER-004"], "91292114")
+        self.assertTrue(all(
+            item.valores[0].pagina == 1
+            for item in result.campos
+            if item.campo.id_campo in {"PER-002", "PER-003", "PER-004"}
+        ))
+
     def test_extracts_only_configured_fields_and_keeps_page_evidence(self) -> None:
         root = create_project()
         document = "Expedientes/EXP-001/01_Documentos/cedula.pdf"

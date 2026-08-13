@@ -30,6 +30,7 @@ from Codigo.ocr import (
     ResultadoOCR,
     TextoExtraido,
     _extract_pdf,
+    _render_pdf_page_bytes,
     _run_tesseract,
     extract_expediente_text,
     extract_selected_files_text,
@@ -50,6 +51,22 @@ def create_project() -> Path:
 
 
 class OCRTests(unittest.TestCase):
+    def test_memory_pdf_uses_configured_renderer_when_pdfium_is_unavailable(self) -> None:
+        rendered = b"\x89PNG\r\n\x1a\nrendered"
+        completed = subprocess.CompletedProcess([], 0, stdout=rendered, stderr=b"")
+        with (
+            patch("Codigo.ocr._render_pdfium_page_bytes", side_effect=ImportError),
+            patch("Codigo.ocr._configured_executable", return_value="pdftoppm") as executable,
+            patch("Codigo.ocr.subprocess.run", return_value=completed) as run,
+        ):
+            result = _render_pdf_page_bytes(b"pdf-content", 2, 300, "pdftoppm")
+
+        self.assertEqual(result, rendered)
+        executable.assert_called_once_with("pdftoppm")
+        self.assertEqual(run.call_args.kwargs["input"], b"pdf-content")
+        self.assertIn("-singlefile", run.call_args.args[0])
+        self.assertIn("2", run.call_args.args[0])
+
     def test_selected_docx_is_processed_from_memory_without_creating_a_source_copy(self) -> None:
         root = create_project()
         content = io.BytesIO()

@@ -241,6 +241,35 @@ def load_extraction_fields(configuration: ProjectConfiguration) -> tuple[CampoEx
     return fields
 
 
+def _read_extraction_catalogs(
+    configuration: ProjectConfiguration,
+) -> dict[str, tuple[str, ...]]:
+    """Carga valores activos de 03_Catalogos sin duplicarlos en código."""
+    sheet_name = configuration.values.get("hojas", {}).get("catalogos")
+    if not isinstance(sheet_name, str) or not sheet_name.strip():
+        return {}
+    try:
+        with zipfile.ZipFile(configuration.route("arquitectura")) as workbook:
+            rows = _read_sheet(
+                workbook,
+                _worksheet_paths(workbook)[sheet_name],
+                _read_shared_strings(workbook),
+            )
+    except (KeyError, OSError, zipfile.BadZipFile, ValueError) as error:
+        raise ExtractionError(f"No fue posible leer 03_Catalogos: {error}") from error
+    values: dict[str, list[str]] = defaultdict(list)
+    for row in rows:
+        catalog = _value(row, "Catalogo")
+        value = _value(row, "Valor")
+        active = _normalizar(_value(row, "Activo") or "1")
+        if catalog and value and active not in {"0", "false", "no"}:
+            values[catalog].append(value)
+    return {
+        catalog: tuple(dict.fromkeys(items))
+        for catalog, items in values.items()
+    }
+
+
 def _validate_extraction_architecture(
     fields: tuple[CampoExtraccion, ...],
     instructions: tuple[InstruccionExtraccion, ...],
@@ -524,8 +553,12 @@ def _labelled_candidates(text: str, phrases: tuple[str, ...], field: CampoExtrac
     return tuple(candidates)
 
 
-def _example_values(field: CampoExtraccion, instruction: InstruccionExtraccion) -> tuple[str, ...]:
-    values: list[str] = []
+def _example_values(
+    field: CampoExtraccion,
+    instruction: InstruccionExtraccion,
+    catalog_values: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    values: list[str] = list(catalog_values)
     for source in (field.descripcion or "", field.observaciones or "", instruction.observaciones or ""):
         match = re.search(r"\bejemplos?\s*:\s*(.+)", source, flags=re.IGNORECASE)
         if not match:
@@ -567,10 +600,11 @@ def _enumerated_candidates(
     text: str,
     field: CampoExtraccion,
     instruction: InstruccionExtraccion,
+    catalog_values: tuple[str, ...] = (),
 ) -> tuple[_Candidate, ...]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     candidates: list[_Candidate] = []
-    for option in _example_values(field, instruction):
+    for option in _example_values(field, instruction, catalog_values):
         normalized_option = _normalizar(option)
         for line in lines:
             normalized_line = _normalizar(line)
@@ -590,6 +624,82 @@ def _enumerated_candidates(
     return tuple(candidates)
 
 
+def _edit_distance(first: str, second: str) -> int:
+    """Distancia acotada para tolerar etiquetas deformadas por OCR."""
+    previous = list(range(len(second) + 1))
+    for row, left in enumerate(first, 1):
+        current = [row]
+        for column, right in enumerate(second, 1):
+            current.append(min(
+                current[-1] + 1,
+                previous[column] + 1,
+                previous[column - 1] + (left != right),
+            ))
+        previous = current
+    return previous[-1]
+
+
+def _fuzzy_label_candidates(
+    text: str,
+    phrases: tuple[str, ...],
+    field: CampoExtraccion,
+) -> tuple[_Candidate, ...]:
+    """Recupera un valor tras una etiqueta corta con hasta dos errores OCR."""
+    candidates: list[_Candidate] = []
+    for line in (item.strip() for item in text.splitlines() if item.strip()):
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        label = _normalizar(parts[0])
+        for phrase in phrases:
+            if " " in phrase or len(phrase) < 5:
+                continue
+            if _edit_distance(label, phrase) > 2:
+                continue
+            values = _label_value(parts[1], field)
+            for value in values:
+                normalized_number = re.fullmatch(r"[\d.,\s-]{5,}", value)
+                cleaned = re.sub(r"\D", "", value) if normalized_number else value
+                if _valid_candidate(cleaned, field):
+                    candidates.append(_Candidate(cleaned, line, 128))
+            break
+    return tuple(candidates)
+
+
+def _preceding_label_candidates(
+    text: str,
+    phrases: tuple[str, ...],
+    field: CampoExtraccion,
+) -> tuple[_Candidate, ...]:
+    """Admite documentos cuyo rótulo se imprime debajo del valor."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    candidates: list[_Candidate] = []
+    complete_value = "completo" in _normalizar(field.descripcion or "")
+    for index, label in enumerate(lines):
+        normalized_label = _normalizar(label)
+        if not any(re.fullmatch(_phrase_pattern(phrase), normalized_label) for phrase in phrases):
+            continue
+        preceding = lines[max(0, index - 3):index]
+        textual = [
+            value
+            for value in preceding
+            if not any(character.isdigit() for character in value)
+            and 2 <= len(_normalizar(value).split()) <= 6
+            and _valid_candidate(value, field)
+        ]
+        if not textual:
+            continue
+        selected = (
+            [textual[-1], *textual[:-1]]
+            if complete_value and len(textual) > 1
+            else textual if complete_value else textual[-1:]
+        )
+        value = " ".join(selected)
+        evidence = "\n".join([*preceding, label])
+        candidates.append(_Candidate(value, evidence, 145 if complete_value else 132))
+    return tuple(candidates)
+
+
 def _anchor_score(context: str, terms: set[str]) -> int:
     context_terms = set(_normalizar(context).split())
     return 10 * len(context_terms & terms)
@@ -600,12 +710,13 @@ def _typed_candidates(
     field: CampoExtraccion,
     instruction: InstruccionExtraccion,
     related_labels: tuple[str, ...],
+    catalog_values: tuple[str, ...] = (),
 ) -> tuple[_Candidate, ...]:
     """Aplica patrones genéricos compilados desde las hojas 01 y 05."""
     phrases = _instruction_phrases(field, instruction)
     kind = _normalizar(field.tipo_dato or "")
     enum_options = (
-        _example_values(field, instruction)
+        _example_values(field, instruction, catalog_values)
         if kind == "enumerado"
         else ()
     )
@@ -632,10 +743,14 @@ def _typed_candidates(
             candidate.evidencia,
             candidate.puntaje + min(sibling_matches, 3) * 8,
         ))
+    candidates.extend(_fuzzy_label_candidates(text, phrases, field))
+    candidates.extend(_preceding_label_candidates(text, phrases, field))
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     if kind == "enumerado":
-        candidates.extend(_enumerated_candidates(text, field, instruction))
+        candidates.extend(_enumerated_candidates(
+            text, field, instruction, catalog_values
+        ))
 
     if kind == "enumerado":
         denomination = re.compile(
@@ -686,6 +801,7 @@ def _extract_values(
     pages: list[dict[str, Any]],
     related_labels: tuple[str, ...] = (),
     inherited: bool = False,
+    catalog_values: tuple[str, ...] = (),
 ) -> tuple[EvidenciaExtraccion, ...]:
     """Extrae sin descartar líneas repetidas y respeta Permite_OCR por página."""
     values: list[EvidenciaExtraccion] = []
@@ -729,7 +845,7 @@ def _extract_values(
                 calidad=100,
             ),)
         raw_candidates = _typed_candidates(
-            text, field, instruction, related_labels
+            text, field, instruction, related_labels, catalog_values
         )
         adjusted_candidates = tuple(
             _Candidate(
@@ -1219,6 +1335,7 @@ def extract_expediente_data(project_root: Path, expediente_id: str) -> Resultado
     except ConfigurationError as error:
         raise ExtractionError(str(error)) from error
     fields, instructions = _read_extraction_architecture(configuration)
+    catalogs = _read_extraction_catalogs(configuration)
     ocr = _load_json(_ocr_path(configuration, expediente_id), "el resultado OCR")
     classification = _load_json(_classification_path(configuration, expediente_id), "la clasificación documental")
     if ocr.get("id_expediente") != expediente_id or classification.get("id_expediente") != expediente_id:
@@ -1375,6 +1492,7 @@ def extract_expediente_data(project_root: Path, expediente_id: str) -> Resultado
                     effective_pages,
                     related_labels,
                     inherited,
+                    catalogs.get(field.catalogo_asociado or "", ()),
                 ))
 
         best_quality: dict[tuple[str, str | None], int] = {}
