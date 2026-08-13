@@ -529,6 +529,41 @@
             systemStatus.textContent = `Estado del Sistema: ${message}`;
         };
 
+        const visibleText = (value, fallback) => {
+            if (Array.isArray(value)) {
+                const text = value.map(item => String(item).trim()).filter(Boolean).join(' | ');
+                return text || fallback;
+            }
+            const text = value === null || value === undefined ? '' : String(value).trim();
+            return text || fallback;
+        };
+
+        const mandatoryFieldsFromValidations = result => {
+            const rules = Array.isArray(result.validacion?.reglas) ? result.validacion.reglas : [];
+            return rules
+                .filter(rule => String(rule.tipo_regla || '').replaceAll('_', ' ').toLowerCase() === 'campo obligatorio')
+                .map(rule => {
+                    const comparisons = Array.isArray(rule.comparaciones) ? rule.comparaciones : [];
+                    const comparison = comparisons[0] || {};
+                    const comparedPage = Number(comparison.pagina_comparada);
+                    const state = comparison.estado || rule.estado;
+                    return {
+                        datos: visibleText(comparison.campo, rule.id_regla || 'No identificado'),
+                        documento_contrastado: visibleText(
+                            comparison.documento_comparado,
+                            'No identificado'
+                        ),
+                        pagina: Number.isInteger(comparedPage) && comparedPage > 0 ? comparedPage : 0,
+                        valor_encontrado: visibleText(
+                            comparison.valor_encontrado,
+                            'No se encontró información'
+                        ),
+                        valor_esperado: visibleText(comparison.valor_esperado, 'No disponible'),
+                        resultado: state === 'Cumple' ? 'Coincide' : 'No coincide'
+                    };
+                });
+        };
+
         const setAnalyzeButtonReady = () => {
             btnAnalyze.disabled = false;
             btnAnalyze.textContent = analyzeButtonReadyText;
@@ -555,12 +590,15 @@
         };
 
         const renderTraceability = result => {
-            const mandatoryFields = Array.isArray(result.trazabilidad?.campos_obligatorios)
+            const architecturalFields = Array.isArray(result.trazabilidad?.campos_obligatorios)
                 ? result.trazabilidad.campos_obligatorios
                 : [];
+            const mandatoryFields = architecturalFields.length
+                ? architecturalFields
+                : mandatoryFieldsFromValidations(result);
             const lines = [];
             if (!mandatoryFields.length) {
-                lines.push('No fue posible consolidar los campos obligatorios de la arquitectura.');
+                lines.push('No se registraron validaciones de campos obligatorios.');
             }
             for (const [index, field] of mandatoryFields.entries()) {
                 const page = Number.isInteger(field.pagina) ? field.pagina : 0;
@@ -658,9 +696,9 @@
                 selectedSelectionId = result.seleccion.id;
                 renderDocuments(result.seleccion.documentos);
                 dropzoneStatus.textContent = `${result.seleccion.documentos.length} archivo(s) listo(s) para análisis.`;
-                actionHint.textContent = result.detalle;
-                showMessage(outputSummary, result.mensaje);
-                showMessage(outputInfo, result.detalle);
+                actionHint.textContent = '';
+                showMessage(outputSummary, '');
+                showMessage(outputInfo, '');
                 progressContainer.hidden = true;
                 progressContainer.classList.remove('is-error');
                 setAnalyzeButtonReady();

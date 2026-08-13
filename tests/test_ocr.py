@@ -265,6 +265,8 @@ class OCRTests(unittest.TestCase):
         self.assertLess(interface.index("Validaciones realizadas:"), interface.index('id="output-info"'))
         self.assertIn("renderTraceability", interface)
         self.assertIn("campos_obligatorios", interface)
+        self.assertIn("mandatoryFieldsFromValidations", interface)
+        self.assertIn("result.validacion?.reglas", interface)
         self.assertIn("Datos", interface)
         self.assertIn("Documento contrastado", interface)
         self.assertIn("Página", interface)
@@ -279,6 +281,12 @@ class OCRTests(unittest.TestCase):
         self.assertIn("showMessage(outputInfo, 'Validaciones en curso')", interface)
         self.assertIn("showMessage(outputSummary, 'Concepto en curso')", interface)
         self.assertNotIn("showMessage(\n                        outputInfo,\n                        `${progress.etapa", interface)
+        self.assertNotIn("No fue posible consolidar los campos obligatorios de la arquitectura.", interface)
+        selection_start = interface.index("selectedSelectionId = result.seleccion.id;")
+        selection_success = interface[
+            selection_start:interface.index("} catch (error) {", selection_start)
+        ]
+        self.assertNotIn("result.detalle", selection_success)
 
     def test_tesseract_extracts_text_and_confidence_in_one_pass(self) -> None:
         tsv = (
