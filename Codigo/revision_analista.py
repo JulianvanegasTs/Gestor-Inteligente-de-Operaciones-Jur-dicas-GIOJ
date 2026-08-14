@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ConfigurationError, ProjectConfiguration, load_configuration
+from .validacion import ValidationError, load_business_rules
 
 
 class AnalystReviewError(ValueError):
@@ -21,6 +22,7 @@ class RevisionValidacionAnalista:
     estado_sistema: str
     estado_revision: str
     observacion: str = ""
+    descripcion: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,6 +142,15 @@ def _legal_validations(
         # el flujo productivo siempre persiste el motor antes de esta fase.
         return ()
     evaluations = payload.get("evaluaciones_reglas", [])
+    try:
+        rule_names = {
+            rule.id_regla: str(rule.criterios.get("Nombre_Regla") or rule.tipo_regla)
+            .replace("Escritura_Firma", "escritura sometida a firma")
+            .replace("_", " ")
+            for rule in load_business_rules(configuration)
+        }
+    except ValidationError:
+        rule_names = {}
     result: list[RevisionValidacionAnalista] = []
     for item in evaluations if isinstance(evaluations, list) else []:
         if not isinstance(item, dict) or not item.get("id_regla"):
@@ -147,7 +158,14 @@ def _legal_validations(
         system_state = str(item.get("resultado_validacion", "No existe información"))
         review_state = "Confirmada" if system_state == "No aplica" else "Pendiente"
         result.append(RevisionValidacionAnalista(
-            str(item["id_regla"]), system_state, review_state, ""
+            str(item["id_regla"]),
+            system_state,
+            review_state,
+            "",
+            rule_names.get(
+                str(item["id_regla"]),
+                str(item.get("tipo_regla") or "Comprobación jurídica").replace("_", " "),
+            ),
         ))
     return tuple(result)
 
@@ -220,6 +238,7 @@ def load_analyst_review(project_root: Path, expediente_id: str) -> RevisionAnali
                     str(item.get("estado_sistema", "")),
                     str(item.get("estado_revision", "Pendiente")),
                     str(item.get("observacion", "")),
+                    str(item.get("descripcion", "Comprobación jurídica")),
                 )
                 for item in payload.get("validaciones", [])
                 if isinstance(item, dict) and item.get("id_regla")
@@ -286,7 +305,11 @@ def record_analyst_review(
                         f"La validación {rule_id or '(sin ID)'} no pertenece al análisis"
                     )
                 item = RevisionValidacionAnalista(
-                    rule_id, previous.estado_sistema, review_state, note
+                    rule_id,
+                    previous.estado_sistema,
+                    review_state,
+                    note,
+                    previous.descripcion,
                 )
             if item is None or item.estado_revision not in allowed_individual:
                 raise AnalystReviewError("La revisión individual contiene un estado no permitido")
@@ -300,8 +323,7 @@ def record_analyst_review(
     pending = [item.id_regla for item in individual if item.estado_revision == "Pendiente"]
     if individual_required and pending:
         raise AnalystReviewError(
-            "Revise individualmente todas las comprobaciones antes de decidir: "
-            + ", ".join(pending)
+            f"Revise individualmente las {len(pending)} comprobación(es) pendientes antes de decidir"
         )
     return _save_review(
         configuration,

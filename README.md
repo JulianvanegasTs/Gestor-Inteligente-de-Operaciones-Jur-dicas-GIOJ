@@ -410,6 +410,16 @@ de plantillas, perfiles, segunda lectura OCR, falsos positivos de matrícula,
 revisión individual, generación de ambos dictámenes y el corpus local de diez
 casos positivos y diez negativos, con 65 hallazgos negativos verificados.
 
+La regresión también cubre etiquetas OCR deformadas en documentos de identidad,
+la codificación canónica de estados, la prohibición de comparar contra una
+escritura antigua cuando falta la escritura para firma y la ocultación de IDs
+técnicos en los mensajes visibles.
+
+Si una fase no puede completarse, la barra de estado informa la fase y la causa
+comprensible. El detalle técnico completo se registra en
+`Logs/analisis_web.log`; los paneles de concepto y validaciones no publican IDs
+internos ni atribuyen todo fallo a la extracción OCR.
+
 ## Prueba manual de conformidad
 
 1. Inicie `python -m Codigo interfaz --puerto 8000` y abra

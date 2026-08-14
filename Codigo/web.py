@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import socket
 import threading
 from dataclasses import asdict
@@ -150,6 +152,34 @@ def _report_payload(report: StartupReport) -> dict[str, Any]:
     }
 
 
+def _analysis_logger(log_directory: Path) -> logging.Logger:
+    """Registra el detalle técnico sin exponer identificadores internos en la UI."""
+    log_directory.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(f"gioj.web.analisis.{log_directory.resolve()}")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    if not logger.handlers:
+        handler = logging.FileHandler(log_directory / "analisis_web.log", encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(handler)
+    return logger
+
+
+def _visible_analysis_error(stage: str, detail: str) -> str:
+    """Traduce fallos técnicos a una causa comprensible y conserva el detalle en Logs."""
+    normalized = detail.casefold()
+    if "estado de validación no permitido" in normalized:
+        return (
+            "el motor jurídico recibió estados de validación fuera del catálogo "
+            "permitido"
+        )
+    if "no cubren exactamente 04_reglas_negocio" in normalized:
+        return "las validaciones no cubrieron todas las reglas jurídicas configuradas"
+    if re.search(r"\b[A-Z]{2,}(?:-[A-Z]{2,})?-\d{3}\b", detail):
+        return f"{stage.casefold()} no pudo completar la evaluación de las reglas configuradas"
+    return detail.rstrip(". ") or "se presentó un error sin detalle"
+
+
 def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     """Crea un servidor solo local para la interfaz oficial del proyecto."""
     interface_path = project_root / "Programa" / "index.html"
@@ -157,6 +187,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     analysis_states_lock = threading.Lock()
     selected_files: dict[str, tuple[ArchivoSeleccionado, ...]] = {}
     selected_files_lock = threading.Lock()
+    analysis_logger = _analysis_logger(project_root / "Logs")
     try:
         mvp_settings = load_configuration(project_root).values.get("mvp", {})
         max_selection_mb = int(mvp_settings.get("tamano_maximo_seleccion_mb", 100)) if isinstance(mvp_settings, dict) else 100
@@ -186,6 +217,32 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
             if not isinstance(value, dict):
                 raise ValueError("El cuerpo debe ser un objeto JSON")
             return value
+
+        def _send_analysis_error(
+            self,
+            expediente_id: str,
+            stage: str,
+            error: Exception,
+        ) -> None:
+            detail = str(error).strip() or error.__class__.__name__
+            visible = _visible_analysis_error(stage, detail)
+            status = f"Error en {stage}: {visible}."
+            analysis_logger.exception(
+                "ANALISIS DETENIDO | %s | etapa=%s | %s",
+                expediente_id,
+                stage,
+                detail,
+            )
+            update_analysis_state(
+                expediente_id,
+                estado="error",
+                etapa=status,
+                error={"etapa": stage, "detalle": visible},
+            )
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": visible, "etapa": stage},
+            )
 
         def _read_selected_files(self) -> tuple[ArchivoSeleccionado, ...]:
             content_type = self.headers.get("Content-Type", "")
@@ -375,8 +432,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         else extract_expediente_text(project_root, expediente_id, report_progress)
                     )
                 except OCRExtractionError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "extracción OCR", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -390,8 +446,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         project_root, expediente_id, result.textos
                     )
                 except SegmentationError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "segmentación documental", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -407,8 +462,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         tuple(item.documento for item in memory_files) if memory_files is not None else None,
                     )
                 except ClassificationError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "clasificación documental", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -420,8 +474,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 try:
                     extraction = extract_expediente_data(project_root, expediente_id)
                 except ExtractionError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "extracción de datos", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -433,8 +486,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 try:
                     normalization = normalize_expediente_data(project_root, expediente_id)
                 except NormalizationError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "normalización documental", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -446,8 +498,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 try:
                     validation = validate_expediente_data(project_root, expediente_id)
                 except ValidationError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "validaciones documentales", error)
                     return
                 update_analysis_state(
                     expediente_id,
@@ -459,16 +510,16 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 try:
                     legal_result = apply_legal_engine(project_root, expediente_id)
                 except LegalEngineError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(expediente_id, "motor jurídico", error)
                     return
                 try:
                     analyst_review = initialize_analyst_review(
                         project_root, expediente_id, legal_result.resultado
                     )
                 except AnalystReviewError as error:
-                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    self._send_analysis_error(
+                        expediente_id, "preparación de la revisión del analista", error
+                    )
                     return
                 update_analysis_state(
                     expediente_id,

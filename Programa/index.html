@@ -633,12 +633,12 @@
             reviewPanel.hidden = false;
             reviewStatus.textContent = `Resultado preliminar: ${preliminaryResult || 'No disponible'} · Revisión del analista: ${state}`;
             reviewValidations.replaceChildren();
-            for (const validation of Array.isArray(review?.validaciones) ? review.validaciones : []) {
+            for (const [index, validation] of (Array.isArray(review?.validaciones) ? review.validaciones : []).entries()) {
                 const item = document.createElement('div');
                 item.className = 'review-validation-item';
                 item.dataset.ruleId = validation.id_regla;
                 const label = document.createElement('span');
-                label.textContent = `${validation.id_regla} · Sistema: ${validation.estado_sistema}`;
+                label.textContent = `${visibleText(validation.descripcion, `Comprobación ${index + 1}`)} · Sistema: ${validation.estado_sistema}`;
                 const select = document.createElement('select');
                 select.setAttribute('aria-label', `Revisión ${validation.id_regla}`);
                 for (const stateOption of ['Pendiente', 'Confirmada', 'Observada']) {
@@ -899,7 +899,9 @@
             try {
                 const result = await request('/api/analisis/iniciar', {id_expediente: selectedSelectionId});
                 if (result.error) {
-                    throw new Error(result.error);
+                    const analysisError = new Error(result.error);
+                    analysisError.analysisStage = result.etapa || 'procesamiento documental';
+                    throw analysisError;
                 }
                 showMessage(outputSummary, result.motor_juridico?.concepto_juridico || result.mensaje);
                 renderTraceability(result);
@@ -911,12 +913,24 @@
                 progressStage.textContent = 'Análisis completado';
                 showSystemStatus('Análisis preliminar completado; pendiente de revisión humana');
             } catch (error) {
-                const message = error instanceof Error ? error.message : 'No fue posible ejecutar el OCR.';
-                showMessage(outputSummary, 'No fue posible extraer el texto documental.');
-                showMessage(outputInfo, message);
+                const message = error instanceof Error
+                    ? error.message
+                    : 'Se presentó un error sin detalle.';
+                const stage = error instanceof Error && error.analysisStage
+                    ? error.analysisStage
+                    : 'conexión con el servidor local';
+                const visibleError = `Error en ${stage}: ${message}.`;
+                showMessage(
+                    outputSummary,
+                    `El concepto jurídico no se generó porque el análisis se detuvo en ${stage}.`
+                );
+                showMessage(
+                    outputInfo,
+                    `No se generaron validaciones porque el análisis se detuvo en ${stage}.`
+                );
                 progressContainer.classList.add('is-error');
-                progressStage.textContent = 'El análisis terminó con error';
-                showSystemStatus('El análisis terminó con error');
+                progressStage.textContent = visibleError;
+                showSystemStatus(visibleError);
             } finally {
                 window.clearInterval(progressTimer);
                 setAnalyzeButtonReady();

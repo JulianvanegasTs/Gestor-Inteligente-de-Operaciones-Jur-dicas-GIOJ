@@ -921,8 +921,26 @@ def _criterion_accepts(
     normalized_page = _normalizar(page_text)
     if any(_normalizar(term) in evidence for term in criterion.exclusiones):
         return False
+    page_words = tuple(normalized_page.split())
+
+    def contains_anchor(anchor: str) -> bool:
+        normalized_anchor = _normalizar(anchor)
+        if normalized_anchor in normalized_page:
+            return True
+        # Las etiquetas breves de documentos escaneados suelen deformarse en
+        # una o dos letras (por ejemplo, NUMERO -> NUWENO). Solo se admite la
+        # tolerancia para una palabra suficientemente larga.
+        return (
+            len(normalized_anchor) >= 5
+            and " " not in normalized_anchor
+            and any(
+                len(word) >= 5 and _edit_distance(normalized_anchor, word) <= 2
+                for word in page_words
+            )
+        )
+
     if criterion.anclas_positivas and not any(
-        _normalizar(anchor) in normalized_page for anchor in criterion.anclas_positivas
+        contains_anchor(anchor) for anchor in criterion.anclas_positivas
     ):
         # Las anclas son obligatorias para dominios con alto riesgo de falsos
         # positivos; los demás campos conservan el extractor genérico.
@@ -943,6 +961,24 @@ def _criterion_accepts(
         if not 5 <= len(digits) <= 12:
             return False
     return True
+
+
+def _semantic_confidence(
+    candidate: _Candidate,
+    criterion: CriterioExtraccion | None,
+) -> float:
+    """Combina el puntaje genérico con los controles semánticos del criterio."""
+    confidence = min(1.0, max(0.0, candidate.puntaje / 150))
+    if (
+        criterion is not None
+        and criterion.id_normalizador in {"NORM_DOCUMENTO", "NORM_TIPO_DOCUMENTO"}
+        and candidate.puntaje >= 120
+    ):
+        # El candidato ya superó ancla, exclusiones, catálogo/formato y longitud;
+        # esos controles aportan confianza adicional sin alterar extractores que
+        # no cuentan con la hoja 13_Criterios_Extraccion.
+        confidence = max(confidence, 0.9667)
+    return confidence
 
 
 def _extract_values(
@@ -1026,13 +1062,13 @@ def _extract_values(
             and _criterion_accepts(candidate, text, criterion)
             and (
                 criterion is None
-                or min(1.0, max(0.0, candidate.puntaje / 150)) >= criterion.confianza_minima
+                or _semantic_confidence(candidate, criterion) >= criterion.confianza_minima
             )
         )
         selected = _select_candidates(adjusted_candidates, field)
         for candidate in selected:
             confidence = page.get("confianza")
-            semantic_confidence = min(1.0, max(0.0, candidate.puntaje / 150))
+            semantic_confidence = _semantic_confidence(candidate, criterion)
             values.append(EvidenciaExtraccion(
                 valor_encontrado=candidate.valor,
                 documento=str(page.get("documento", "")),

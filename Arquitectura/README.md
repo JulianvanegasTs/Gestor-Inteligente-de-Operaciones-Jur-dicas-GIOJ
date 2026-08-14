@@ -111,3 +111,15 @@ La generación documental consume únicamente los marcadores vigentes de
 `09_Marcadores_Documento`, verifica que no queden variables sin reemplazar y
 comprueba que el hash de la plantilla fuente sea idéntico antes y después. La
 revisión humana debe cubrir cada comprobación antes de habilitar esta fase.
+
+Los estados jurídicos se conservan siempre con su codificación canónica:
+`Cumple`, `No cumple`, `No existe información` y `No aplica`. El rol funcional
+clasificado tiene prioridad sobre similitudes físicas: una escritura antigua o
+de compraventa no puede utilizarse como `Escritura_Firma` si la clasificación
+no le asignó ese rol. Cuando falta la escritura sometida a firma, el flujo debe
+terminar en no conformidad trazable y no en un error técnico.
+
+Los identificadores de arquitectura, como `OBL-CRE-002`, permanecen en JSON y
+Logs para auditoría, pero no son denominaciones visibles en la interfaz. El
+concepto, la trazabilidad y la revisión del analista utilizan `Nombre_Regla` y
+los nombres funcionales de `01_Campos_Extraccion`.

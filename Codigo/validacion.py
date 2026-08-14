@@ -447,8 +447,6 @@ def _validate_mandatory_field_legacy(
     field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
     validated_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
     escritura_documents = _documents_of_type(classifications, validated_type)
-    if not escritura_documents:
-        escritura_documents = _documents_matching_architecture_type(configuration, ocr, validated_type)
     pages = _ocr_pages(ocr, escritura_documents)
     entries = _all_field_entries(values, field_id)
     source_types = tuple(part for part in _criterion(rule, "Documento_Comparado").split("|") if part)
@@ -509,8 +507,6 @@ def _validate_mandatory_field(
     field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
     validated_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
     escritura_documents = _documents_of_type(classifications, validated_type)
-    if not escritura_documents:
-        escritura_documents = _documents_matching_architecture_type(configuration, ocr, validated_type)
     pages = _ocr_pages(ocr, escritura_documents)
     entries = _all_field_entries(values, field_id)
     source_types = tuple(part.strip() for part in _criterion(rule, "Documento_Comparado").split("|") if part.strip())
@@ -569,11 +565,11 @@ def _validate_mandatory_field(
             field_id, "Dato obligatorio", "",
             escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
             None, " | ".join(source_types), None,
-            "No existe informaciÃ³n", observation,
+            "No existe información", observation,
         ))
     state = (
-        "No existe informaciÃ³n"
-        if all(item.estado == "No existe informaciÃ³n" for item in comparisons)
+        "No existe información"
+        if all(item.estado == "No existe información" for item in comparisons)
         else "No cumple" if any(item.estado != "Cumple" for item in comparisons)
         else "Cumple"
     )
@@ -779,7 +775,7 @@ def _validate_presence(
         if not target_documents or item.get("documento") in target_documents
     ]
     entry = entries[0] if entries else None
-    state = "Cumple" if entry else "No existe informaciÃ³n"
+    state = "Cumple" if entry else "No existe información"
     observation = (
         "El campo obligatorio está presente en el documento validado."
         if entry else "No existe evidencia del campo obligatorio en el documento validado."

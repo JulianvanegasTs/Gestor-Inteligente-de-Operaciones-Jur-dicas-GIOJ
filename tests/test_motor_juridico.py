@@ -137,6 +137,7 @@ class LegalEngineTests(unittest.TestCase):
         self.assertIn("concluye No Conformidad", concept)
         self.assertNotIn("escritura_firma.pdf", concept)
         self.assertNotIn("Texto de la minuta", concept)
+        self.assertNotIn("MIN-001", concept)
 
     def test_traceability_registers_every_decision_and_formats_inconsistency(self) -> None:
         rule = ReglaNegocio(

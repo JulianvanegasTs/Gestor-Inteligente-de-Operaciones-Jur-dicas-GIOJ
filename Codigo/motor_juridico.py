@@ -336,11 +336,27 @@ def _legal_concept_legacy(result: str, validations: dict[str, dict[str, Any]]) -
     )
 
 
-def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
+def _visible_rule_name(rule: ReglaNegocio | None, validation: dict[str, Any]) -> str:
+    """Obtiene la denominación funcional sin publicar el ID técnico de la regla."""
+    name = _criterion(rule, "Nombre_Regla") if rule is not None else ""
+    if not name:
+        name = str(validation.get("tipo_regla") or "comprobación jurídica")
+    return (
+        name.replace("Escritura_Firma", "escritura sometida a firma")
+        .replace("_", " ")
+        .strip()
+    )
+
+
+def _legal_concept(
+    result: str,
+    validations: dict[str, dict[str, Any]],
+    rules: tuple[ReglaNegocio, ...] = (),
+) -> str:
     """Redacta un dictamen legajista proporcional al resultado preliminar."""
     failed = [
         item for rule_id, item in validations.items()
-        if rule_id != "CON-001" and item.get("estado") in {"No cumple", "No existe información", "No existe informaciÃ³n"}
+        if rule_id != "CON-001" and item.get("estado") in {"No cumple", "No existe información"}
     ]
     if not failed:
         return (
@@ -350,15 +366,33 @@ def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
             "en la totalidad de las reglas bloqueantes aplicables; en consecuencia, se propone concepto preliminar "
             "de Conformidad, sujeto a la revisión individual y confirmación del analista jurídico."
         )
-    details = " ".join(
-        f"{index}. {item.get('id_regla', 'Regla no identificada')}: "
-        f"{item.get('observacion') or 'La evidencia registrada requiere corrección o complemento.'}"
-        for index, item in enumerate(failed, 1)
-    )
+    rule_index = {rule.id_regla: rule for rule in rules}
+    type_labels = {
+        "Integridad_Documental": "integridad documental",
+        "Campo_Obligatorio": "datos obligatorios",
+        "Formato_Minuta": "clausulado de la minuta hipotecaria",
+        "Poderes": "facultades y poderes",
+        "Calidad_Documental": "calidad documental",
+    }
+    grouped: dict[str, list[str]] = {}
+    for item in failed:
+        rule = rule_index.get(str(item.get("id_regla", "")))
+        rule_type = rule.tipo_regla if rule is not None else str(item.get("tipo_regla") or "Comprobaciones")
+        grouped.setdefault(rule_type, []).append(_visible_rule_name(rule, item))
+    details: list[str] = []
+    for number, (rule_type, names) in enumerate(grouped.items(), 1):
+        unique_names = list(dict.fromkeys(names))
+        visible_names = "; ".join(unique_names[:3])
+        remainder = len(unique_names) - 3
+        if remainder > 0:
+            visible_names += f"; y {remainder} comprobación(es) adicional(es)"
+        label = type_labels.get(rule_type, rule_type.replace("_", " ").casefold())
+        details.append(f"{number}. {label}: {visible_names}")
     return (
         f"Examinado integralmente el expediente y confrontada la escritura sometida a firma con sus fuentes "
         f"documentales y reglas jurídicas rectoras, se registraron {len(failed)} comprobación(es) adversa(s) "
-        f"o carentes de evidencia suficiente. El análisis concluye {result} preliminar. Fundamentos: {details} "
+        f"o carentes de evidencia suficiente. El análisis concluye {result} preliminar. Fundamentos: "
+        f"{' '.join(details)}. "
         "Las discordancias o ausencias deberán ser subsanadas y cada comprobación queda sometida a revisión "
         "individual del analista jurídico, cuyo criterio profesional confirma o rechaza este dictamen de apoyo."
     )
@@ -670,7 +704,7 @@ def apply_legal_engine(project_root: Path, expediente_id: str) -> ResultadoMotor
         sum(item.estado == "No existe información" for item in results_by_type),
         sum(item.estado == "No aplica" for item in results_by_type),
     )
-    concept = _legal_concept(result, validations)
+    concept = _legal_concept(result, validations, rules)
     traceability = _build_traceability(result, rules, validations, fields)
 
     target = _output_path(configuration, expediente_id)

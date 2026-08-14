@@ -15,7 +15,17 @@ from lxml import etree
 
 from Codigo.clasificacion import DocumentProfile, _classify_document
 from Codigo.config import ProjectConfiguration, load_configuration
-from Codigo.extraccion import CriterioExtraccion, _Candidate, _criterion_accepts
+from Codigo.extraccion import (
+    CriterioExtraccion,
+    _Candidate,
+    _canonical_input,
+    _criterion_accepts,
+    _read_extraction_architecture,
+    _read_extraction_catalogs,
+    _read_extraction_criteria,
+    _semantic_confidence,
+    _typed_candidates,
+)
 from Codigo.generacion_documental import generate_official_document
 from Codigo.ocr import _verified_ocr_file
 from Codigo.revision_analista import (
@@ -23,7 +33,12 @@ from Codigo.revision_analista import (
     initialize_analyst_review,
     record_analyst_review,
 )
-from Codigo.validacion import load_business_rules
+from Codigo.validacion import (
+    ReglaNegocio,
+    _validate_mandatory_field,
+    load_business_rules,
+)
+from Codigo.web import _visible_analysis_error
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -76,6 +91,75 @@ class IntegralCycleTests(unittest.TestCase):
             "MATRÍCULA INMOBILIARIA Nro Matrícula: 300-279737",
             criterion,
         ))
+
+    def test_real_identity_ocr_recovers_catalog_and_noisy_number(self) -> None:
+        configuration = load_configuration(PROJECT_ROOT)
+        fields, instructions = _read_extraction_architecture(configuration)
+        field_by_id = {item.id_campo: item for item in fields}
+        criteria = _read_extraction_criteria(configuration)
+        catalogs = _read_extraction_catalogs(configuration)
+        text = (
+            "CEDULA DE CIUDADANIA\n"
+            "nuweño 91,292,114\n"
+            "GARCIA CARVAJAL\nAPELLIDOS\nJAVIER ALFONSO\nNOMBRES"
+        )
+        values: dict[str, set[str]] = {}
+        for field_id in ("PER-003", "PER-004"):
+            field = field_by_id[field_id]
+            instruction = next(
+                item for item in instructions
+                if item.id_campo == field_id and item.documento_origen == "Documento_Identidad"
+            )
+            criterion = criteria[field_id]
+            candidates = _typed_candidates(
+                text,
+                field,
+                instruction,
+                (),
+                catalogs.get(field.catalogo_asociado or "", ()),
+            )
+            accepted = {
+                _canonical_input(item.valor, criterion.id_normalizador)
+                for item in candidates
+                if item.puntaje >= 80
+                and _criterion_accepts(item, text, criterion)
+                and _semantic_confidence(item, criterion) >= criterion.confianza_minima
+            }
+            values[field_id] = accepted
+        self.assertIn("CÉDULA DE CIUDADANÍA", values["PER-003"])
+        self.assertIn("91292114", values["PER-004"])
+
+    def test_missing_signature_writing_never_compares_against_an_old_deed(self) -> None:
+        configuration = load_configuration(PROJECT_ROOT)
+        rule = ReglaNegocio(
+            "OBL-PER-004",
+            "Campo_Obligatorio",
+            "01_Campos_Extraccion",
+            {
+                "ID_Campo_Clausula": "PER-004",
+                "Documento_Validado": "Escritura_Firma",
+                "Documento_Comparado": "Documento_Identidad",
+            },
+        )
+        result = _validate_mandatory_field(
+            rule,
+            {"per 004": [{"valor": "91292114", "documento": "cedula.pdf", "pagina": 1}]},
+            configuration,
+            {
+                "cedula.pdf": "Documento de identidad|DOC_ID",
+                "escritura-antigua.pdf": "Escritura de compraventa|Escritura_Antigua",
+            },
+            {"textos": [{"documento": "escritura-antigua.pdf", "pagina": 1, "texto": "C.C. 91.292.114"}]},
+        )
+        self.assertEqual(result.estado, "No cumple")
+        self.assertIsNone(result.comparaciones[0].pagina_validada)
+        self.assertEqual(result.comparaciones[0].documento_validado, "Escritura_Firma")
+
+    def test_internal_rule_ids_are_not_exposed_as_analysis_error(self) -> None:
+        detail = "Existen reglas con estado de validación no permitido: OBL-CRE-002, OBL-CRE-003"
+        visible = _visible_analysis_error("motor jurídico", detail)
+        self.assertIn("estados de validación", visible)
+        self.assertNotIn("OBL-CRE", visible)
 
     def test_profile_classification_uses_physical_type_and_logical_role(self) -> None:
         profile = DocumentProfile(
