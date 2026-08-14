@@ -21,17 +21,18 @@ from .bootstrap import StartupReport, initialize_project
 from .clasificacion import ClassificationError, classify_expediente_documents
 from .config import ConfigurationError, load_configuration
 from .extraccion import ExtractionError, extract_expediente_data
+from .generacion_documental import DocumentGenerationError, generate_official_document
 from .expediente import ArchivoSeleccionado, ExpedienteError, create_selected_file, list_expedientes, read_expediente
 from .motor_juridico import LegalEngineError, apply_legal_engine
 from .normalizacion import NormalizationError, normalize_expediente_data
 from .ocr import OCRExtractionError, extract_expediente_text, extract_selected_files_text
 from .revision_analista import (
     AnalystReviewError,
-    authorize_document_generation,
     initialize_analyst_review,
     load_analyst_review,
     record_analyst_review,
 )
+from .segmentacion import SegmentationError, segment_expediente_documents
 from .validacion import ValidationError, validate_expediente_data
 
 
@@ -380,6 +381,21 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 update_analysis_state(
                     expediente_id,
                     estado="procesando",
+                    etapa="Segmentando documentos lógicos",
+                    documento=None,
+                    pagina=None,
+                )
+                try:
+                    segmentation = segment_expediente_documents(
+                        project_root, expediente_id, result.textos
+                    )
+                except SegmentationError as error:
+                    update_analysis_state(expediente_id, estado="error", etapa=str(error))
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                update_analysis_state(
+                    expediente_id,
+                    estado="procesando",
                     etapa="Clasificando documentos",
                     documento=None,
                     pagina=None,
@@ -461,6 +477,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     documento=None,
                     pagina=None,
                     archivo_salida=result.archivo_salida,
+                    archivo_segmentacion=segmentation.archivo_salida,
                     archivo_clasificacion=classification.archivo_salida,
                     archivo_extraccion=extraction.archivo_salida,
                     archivo_normalizacion=normalization.archivo_salida,
@@ -525,6 +542,12 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                         "resumen": asdict(legal_result.resumen),
                         "observaciones": [asdict(item) for item in legal_result.observaciones],
                     },
+                    "segmentacion": {
+                        "archivo_salida": segmentation.archivo_salida,
+                        "documentos_logicos": [
+                            asdict(item) for item in segmentation.documentos_logicos
+                        ],
+                    },
                     "trazabilidad": (
                         asdict(legal_result.trazabilidad)
                         if legal_result.trazabilidad is not None
@@ -537,12 +560,17 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                 expediente_id = payload.get("id_expediente")
                 decision = payload.get("decision")
                 observation = payload.get("observacion", "")
+                validation_reviews = payload.get("validaciones")
                 if not all(isinstance(item, str) for item in (expediente_id, decision, observation)):
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "La revisión contiene datos inválidos"})
                     return
                 try:
                     review = record_analyst_review(
-                        project_root, expediente_id, decision, observation
+                        project_root,
+                        expediente_id,
+                        decision,
+                        observation,
+                        validation_reviews if isinstance(validation_reviews, list) else None,
                     )
                 except AnalystReviewError as error:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
@@ -558,17 +586,17 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "El expediente es obligatorio"})
                     return
                 try:
-                    authorization = authorize_document_generation(project_root, expediente_id)
-                except AnalystReviewError as error:
+                    generated = generate_official_document(project_root, expediente_id)
+                except DocumentGenerationError as error:
                     self._send_json(HTTPStatus.CONFLICT, {"error": str(error)})
                     return
-                self._send_json(HTTPStatus.CONFLICT, {
-                    "mensaje": "Generación documental autorizada y pendiente.",
+                self._send_json(HTTPStatus.OK, {
+                    "mensaje": "Documento oficial generado.",
                     "detalle": (
-                        "La revisión humana permite continuar con la plantilla oficial, pero la creación "
-                        "Word/PDF corresponde a GIOJ-012 y GIOJ-013."
+                        f"Word: {generated.archivo_word}. PDF: {generated.archivo_pdf}. "
+                        "El consecutivo permanece reservado para diligenciamiento manual del analista."
                     ),
-                    "autorizacion": asdict(authorization),
+                    "generacion": asdict(generated),
                 })
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada"})

@@ -249,8 +249,17 @@ def _classification_index(payload: dict[str, Any]) -> dict[str, str]:
     for item in payload.get("documentos", []):
         if not isinstance(item, dict) or not isinstance(item.get("documento"), str):
             continue
-        document_type = item.get("tipo_documental") or item.get("codigo_tipo_documental") or ""
-        result[item["documento"]] = str(document_type)
+        document_types = tuple(dict.fromkeys(
+            str(value)
+            for value in (
+                item.get("tipo_documental"),
+                item.get("tipo_documental_fisico"),
+                item.get("codigo_tipo_documental"),
+                item.get("rol_documental"),
+            )
+            if value
+        ))
+        result[item["documento"]] = "|".join(document_types)
     return result
 
 
@@ -264,7 +273,7 @@ def _documents_of_type(classifications: dict[str, str], document_type: str) -> t
     return tuple(
         document
         for document, current in classifications.items()
-        if _document_type_key(current) == wanted
+        if any(_document_type_key(part) == wanted for part in current.split("|"))
     )
 
 
@@ -392,6 +401,8 @@ def _condition_applies(rule: ReglaNegocio, values: dict[str, list[dict[str, Any]
     if "=" not in condition:
         return True
     field_id, expected = (part.strip() for part in condition.split("=", 1))
+    if _normalizar(field_id) == "existe campo":
+        return bool(_all_field_entries(values, expected))
     entries = _all_field_entries(values, field_id)
     return any(_equal(expected, str(entry.get("valor", ""))) for entry in entries)
 
@@ -426,7 +437,7 @@ def _validate_unique_document(rule: ReglaNegocio, classifications: dict[str, str
     return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), comparison.observacion)
 
 
-def _validate_mandatory_field(
+def _validate_mandatory_field_legacy(
     rule: ReglaNegocio,
     values: dict[str, list[dict[str, Any]]],
     configuration: ProjectConfiguration,
@@ -444,8 +455,10 @@ def _validate_mandatory_field(
     expected_entries = [
         entry for entry in entries
         if any(
-            _document_type_key(classifications.get(str(entry.get("documento", "")), ""))
-            == _document_type_key(source)
+            any(
+                _document_type_key(part) == _document_type_key(source)
+                for part in classifications.get(str(entry.get("documento", "")), "").split("|")
+            )
             for source in source_types
         )
     ]
@@ -483,6 +496,94 @@ def _validate_mandatory_field(
         observation,
     )
     return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _validate_mandatory_field(
+    rule: ReglaNegocio,
+    values: dict[str, list[dict[str, Any]]],
+    configuration: ProjectConfiguration,
+    classifications: dict[str, str],
+    ocr: dict[str, Any],
+) -> ResultadoValidacion:
+    """Contrasta todos los valores fuente, no únicamente el primero."""
+    field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
+    validated_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
+    escritura_documents = _documents_of_type(classifications, validated_type)
+    if not escritura_documents:
+        escritura_documents = _documents_matching_architecture_type(configuration, ocr, validated_type)
+    pages = _ocr_pages(ocr, escritura_documents)
+    entries = _all_field_entries(values, field_id)
+    source_types = tuple(part.strip() for part in _criterion(rule, "Documento_Comparado").split("|") if part.strip())
+
+    def belongs_to_source(entry: dict[str, Any]) -> bool:
+        classified = classifications.get(str(entry.get("documento", "")), "").split("|")
+        return any(
+            _document_type_key(part) == _document_type_key(source)
+            for source in source_types
+            for part in classified
+        )
+
+    expected_entries = [entry for entry in entries if belongs_to_source(entry)]
+    if not expected_entries:
+        expected_entries = [entry for entry in entries if entry.get("documento") not in escritura_documents]
+    escritura_entries = [entry for entry in entries if entry.get("documento") in escritura_documents]
+    unique_expected: dict[tuple[str, str, int | None], dict[str, Any]] = {}
+    for entry in expected_entries:
+        page = entry.get("pagina")
+        key = (str(entry.get("valor", "")), str(entry.get("documento", "")), int(page) if isinstance(page, (int, float)) else None)
+        unique_expected.setdefault(key, entry)
+
+    comparisons: list[ComparacionValidacion] = []
+    for expected_entry in unique_expected.values():
+        expected = str(expected_entry.get("valor", ""))
+        found_entry = next(
+            (entry for entry in escritura_entries if _equal(expected, str(entry.get("valor", "")))),
+            None,
+        )
+        if found_entry:
+            validated_page = found_entry.get("pagina")
+            found = str(found_entry.get("valor", ""))
+        else:
+            validated_page, found = _matching_page(expected, pages)
+        state = "Cumple" if validated_page else "No cumple"
+        observation = (
+            "El dato obligatorio fue localizado en Escritura_Firma y conserva trazabilidad contra el documento fuente."
+            if state == "Cumple"
+            else "El dato esperado del documento fuente no fue localizado en Escritura_Firma."
+        )
+        source_page = expected_entry.get("pagina")
+        comparisons.append(_trace_comparison(
+            field_id,
+            expected,
+            found,
+            escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
+            int(validated_page) if isinstance(validated_page, (int, float)) else None,
+            str(expected_entry.get("documento", "")),
+            int(source_page) if isinstance(source_page, (int, float)) else None,
+            state,
+            observation,
+        ))
+    if not comparisons:
+        observation = "No existe un valor fuente trazable para validar el dato obligatorio."
+        comparisons.append(_trace_comparison(
+            field_id, "Dato obligatorio", "",
+            escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
+            None, " | ".join(source_types), None,
+            "No existe informaciÃ³n", observation,
+        ))
+    state = (
+        "No existe informaciÃ³n"
+        if all(item.estado == "No existe informaciÃ³n" for item in comparisons)
+        else "No cumple" if any(item.estado != "Cumple" for item in comparisons)
+        else "Cumple"
+    )
+    observation = (
+        "Todos los valores obligatorios contrastados fueron localizados en Escritura_Firma."
+        if state == "Cumple" else comparisons[0].observacion
+    )
+    return ResultadoValidacion(
+        rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, tuple(comparisons), observation
+    )
 
 
 def _bookmark_text(document_path: Path, bookmark: str) -> str:
@@ -536,9 +637,23 @@ def _validate_clause(
             for alternative in alternatives:
                 result = re.sub(re.escape(str(alternative)), str(canonical), result, flags=re.IGNORECASE)
         return result
-    best = max(((_clause_score(expected, comparable_text(str(item.get("texto", "")))), item) for item in pages), default=(0.0, {}), key=lambda pair: pair[0])
-    score, page = best
-    threshold = float(configuration.values.get("analisis", {}).get("umbral_coincidencia_clausula", 0.58))
+    ordered_pages = sorted(pages, key=lambda item: int(item.get("pagina", 0) or 0))
+    windows: list[tuple[str, dict[str, Any]]] = []
+    for index, page in enumerate(ordered_pages):
+        text = str(page.get("texto", ""))
+        windows.append((text, page))
+        if index + 1 < len(ordered_pages):
+            windows.append((text + "\n" + str(ordered_pages[index + 1].get("texto", "")), page))
+    best = max(
+        ((_clause_score(expected, comparable_text(text)), page, text) for text, page in windows),
+        default=(0.0, {}, ""),
+        key=lambda pair: pair[0],
+    )
+    score, page, matched_text = best
+    threshold = float(
+        _criterion(rule, "Umbral_Comparacion")
+        or configuration.values.get("analisis", {}).get("umbral_coincidencia_clausula", 0.8)
+    )
     state = "Cumple" if expected and score >= threshold else "No cumple" if expected and pages else "No existe información"
     observation = (
         f"Coincidencia estructural de {score:.0%} con la sección {bookmark}."
@@ -547,7 +662,7 @@ def _validate_clause(
     comparison = _trace_comparison(
         _criterion(rule, "ID_Campo_Clausula", rule.id_regla),
         expected[:1600],
-        str(page.get("texto", ""))[:1600],
+        matched_text[:1600],
         escritura_documents[0] if len(escritura_documents) == 1 else "Escritura_Firma",
         int(page.get("pagina", 0) or 0) or None,
         "Minuta_hipoteca.docx",
@@ -588,8 +703,23 @@ def _validate_power(
     else:
         candidates = [row for row in candidates if row.get("Tipo_Regla") != "Poder_Matriz"]
     required_columns = ("Numero_Poder", "Fecha_Poder", "Notaria", "Ciudad_Notaria")
+
+    def catalog_value_present(column: str, value: str) -> bool:
+        if not value:
+            return True
+        if column == "Fecha_Poder":
+            parsed = _as_date(value)
+            if parsed is not None:
+                variants = (
+                    parsed.strftime("%d/%m/%Y"),
+                    parsed.strftime("%d-%m-%Y"),
+                    f"{parsed.day} de {('enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre')[parsed.month - 1]} de {parsed.year}",
+                )
+                return any(_normalizar(item) in _normalizar(full_text) for item in variants)
+        return _normalizar(value) in _normalizar(full_text)
+
     matched = next(
-        (row for row in candidates if all(not row.get(column) or _normalizar(row[column]) in _normalizar(full_text) for column in required_columns)),
+        (row for row in candidates if all(catalog_value_present(column, row.get(column, "")) for column in required_columns)),
         None,
     )
     state = "Cumple" if matched else "No cumple" if pages else "No existe información"
@@ -636,6 +766,60 @@ def _validate_quality(rule: ReglaNegocio, classifications: dict[str, str], ocr: 
     return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
 
 
+def _validate_presence(
+    rule: ReglaNegocio,
+    values: dict[str, list[dict[str, Any]]],
+    classifications: dict[str, str],
+) -> ResultadoValidacion:
+    field_id = _criterion(rule, "ID_Campo_Clausula") or _criterion(rule, "Fuente_Valor_Esperado")
+    validated_type = _criterion(rule, "Documento_Validado", "Escritura_Firma")
+    target_documents = _documents_of_type(classifications, validated_type)
+    entries = [
+        item for item in _all_field_entries(values, field_id)
+        if not target_documents or item.get("documento") in target_documents
+    ]
+    entry = entries[0] if entries else None
+    state = "Cumple" if entry else "No existe informaciÃ³n"
+    observation = (
+        "El campo obligatorio está presente en el documento validado."
+        if entry else "No existe evidencia del campo obligatorio en el documento validado."
+    )
+    comparison = _trace_comparison(
+        field_id,
+        "Dato obligatorio presente",
+        str(entry.get("valor", "")) if entry else "",
+        str(entry.get("documento", "")) if entry else validated_type,
+        int(entry.get("pagina")) if entry and isinstance(entry.get("pagina"), (int, float)) else None,
+        "01_Campos_Extraccion",
+        None,
+        state,
+        observation,
+    )
+    return ResultadoValidacion(rule.id_regla, rule.tipo_regla, rule.fuente_regla, state, (comparison,), observation)
+
+
+def _validate_manual_responsibility(rule: ReglaNegocio) -> ResultadoValidacion:
+    observation = (
+        _criterion(rule, "Mensaje_Conformidad")
+        or _criterion(rule, "Mensaje_Falla")
+        or "Control reservado al analista; GIOJ no solicita ni genera este dato."
+    )
+    comparison = _trace_comparison(
+        _criterion(rule, "Nombre_Regla", rule.id_regla),
+        "Diligenciamiento manual por el analista",
+        "No intervenido por GIOJ",
+        "Analista",
+        None,
+        "04_Reglas_Negocio",
+        None,
+        "No aplica",
+        observation,
+    )
+    return ResultadoValidacion(
+        rule.id_regla, rule.tipo_regla, rule.fuente_regla, "No aplica", (comparison,), observation
+    )
+
+
 def _validate(
     rule: ReglaNegocio,
     values: dict[str, list[dict[str, Any]]],
@@ -649,10 +833,14 @@ def _validate(
         ocr = ocr or {}
         if not _condition_applies(rule, values):
             return _not_applicable(rule)
+        if comparison_type == "Responsabilidad_Manual":
+            return _validate_manual_responsibility(rule)
         if comparison_type == "Documento_Unico":
             return _validate_unique_document(rule, classifications)
         if comparison_type in {"Campo_Obligatorio_Comparado", "Entidad_Representada"}:
             return _validate_mandatory_field(rule, values, configuration, classifications, ocr)
+        if comparison_type == "Campo_Obligatorio_Presencia":
+            return _validate_presence(rule, values, classifications)
         if comparison_type == "Clausula_Minuta":
             return _validate_clause(rule, configuration, classifications, ocr)
         if comparison_type == "Poder_Catalogo":

@@ -117,7 +117,12 @@ def _load(path: Path, expediente_id: str) -> dict[str, Any]:
 
 
 def _evidence(value: dict[str, Any]) -> dict[str, Any]:
-    names = ("documento", "pagina", "metodo", "confianza", "evidencia_textual", "id_extraccion", "documento_origen", "prioridad", "heredado", "calidad")
+    names = (
+        "documento", "pagina", "metodo", "confianza", "evidencia_textual",
+        "id_extraccion", "documento_origen", "prioridad", "heredado", "calidad",
+        "valor_normalizado", "id_criterio", "documento_logico_id",
+        "confianza_semantica", "estado_verificacion_ocr",
+    )
     return {name: value[name] for name in names if name in value}
 
 

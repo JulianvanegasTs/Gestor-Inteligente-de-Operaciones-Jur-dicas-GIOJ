@@ -449,9 +449,9 @@ Reporte de trazabilidad.
 
 ## Criterios de aceptación
 
-□ Cada incumplimiento tiene evidencia.
+☑ Cada incumplimiento tiene evidencia.
 
-□ El analista puede ubicar el error.
+☑ El analista puede ubicar el error.
 
 ---
 
@@ -484,9 +484,9 @@ Concepto jurídico.
 
 ## Criterios de aceptación
 
-□ Diferencia correctamente conformidad y no conformidad.
+☑ Diferencia correctamente conformidad y no conformidad.
 
-□ No reemplaza decisión del analista.
+☑ No reemplaza decisión del analista.
 
 ---
 
@@ -518,9 +518,9 @@ Documento Word generado.
 
 ## Criterios de aceptación
 
-□ Conserva formato original.
+☑ Conserva formato original.
 
-□ Todos los marcadores son reemplazados.
+☑ Todos los marcadores son reemplazados.
 
 ---
 
@@ -545,9 +545,9 @@ PDF listo para entrega.
 
 ## Criterios de aceptación
 
-□ PDF generado correctamente.
+☑ PDF generado correctamente.
 
-□ Mantiene formato documental.
+☑ Mantiene formato documental.
 
 ---
 
@@ -594,10 +594,10 @@ PDF
 
 ## Criterios de aceptación
 
-□ El sistema completa un análisis completo.
+☑ El sistema completa un análisis completo.
 
-□ Genera certificado correcto.
+☑ Genera certificado correcto.
 
-□ Mantiene trazabilidad.
+☑ Mantiene trazabilidad.
 
-□ No requiere intervención técnica.
+☑ No requiere intervención técnica.

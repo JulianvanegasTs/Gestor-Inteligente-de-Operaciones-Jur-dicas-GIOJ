@@ -62,6 +62,26 @@ class InstruccionExtraccion:
 
 
 @dataclass(frozen=True)
+class CriterioExtraccion:
+    """Criterio semántico por campo definido en ``13_Criterios_Extraccion``."""
+
+    id_criterio: str
+    id_campo: str
+    fuente_principal: str
+    documento_contraste: str
+    anclas_positivas: tuple[str, ...]
+    regla_valor: str
+    exclusiones: tuple[str, ...]
+    zona_preferida: str
+    cardinalidad: str
+    clave_entidad: str
+    id_normalizador: str
+    precedencia: float
+    confianza_minima: float
+    fallback: str
+
+
+@dataclass(frozen=True)
 class EvidenciaExtraccion:
     """Valor y ubicación exacta recuperados del resultado OCR."""
 
@@ -76,6 +96,11 @@ class EvidenciaExtraccion:
     prioridad: float | None = None
     heredado: bool = False
     calidad: int | None = None
+    valor_normalizado: str | None = None
+    id_criterio: str | None = None
+    documento_logico_id: str | None = None
+    confianza_semantica: float | None = None
+    estado_verificacion_ocr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -233,6 +258,68 @@ def _read_extraction_architecture(configuration: ProjectConfiguration) -> tuple[
         raise ExtractionError("05_Extraccion_Documental no contiene instrucciones definidas")
     _validate_extraction_architecture(fields, instructions)
     return fields, instructions
+
+
+def _semantic_parts(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in re.split(r"[;|]", value) if item.strip())
+
+
+def _read_extraction_criteria(configuration: ProjectConfiguration) -> dict[str, CriterioExtraccion]:
+    sheet_name = configuration.values.get("hojas", {}).get("criterios_extraccion")
+    if not isinstance(sheet_name, str) or not sheet_name.strip():
+        return {}
+    try:
+        with zipfile.ZipFile(configuration.route("arquitectura")) as workbook:
+            paths = _worksheet_paths(workbook)
+            rows = _read_sheet(
+                workbook,
+                paths[sheet_name],
+                _read_shared_strings(workbook),
+            )
+            normalizer_sheet = configuration.values.get("hojas", {}).get("normalizadores_entrada")
+            normalizer_rows = _read_sheet(
+                workbook,
+                paths[str(normalizer_sheet)],
+                _read_shared_strings(workbook),
+            ) if normalizer_sheet and str(normalizer_sheet) in paths else []
+    except (KeyError, OSError, zipfile.BadZipFile, ValueError) as error:
+        raise ExtractionError(f"No fue posible leer 13_Criterios_Extraccion: {error}") from error
+    available_normalizers = {
+        row.get("ID_Normalizador", "").strip()
+        for row in normalizer_rows
+        if row.get("ID_Normalizador", "").strip()
+    }
+    result: dict[str, CriterioExtraccion] = {}
+    for row in rows:
+        field_id = row.get("ID_Campo", "").strip()
+        criterion_id = row.get("ID_Criterio", "").strip()
+        if not field_id or not criterion_id:
+            continue
+        try:
+            precedence = float(row.get("Precedencia", "999") or 999)
+            confidence = float(row.get("Confianza_Minima", "0") or 0)
+        except ValueError as error:
+            raise ExtractionError(f"{criterion_id}: precedencia o confianza inválida") from error
+        normalizer_id = row.get("ID_Normalizador", "").strip()
+        if normalizer_id and available_normalizers and normalizer_id not in available_normalizers:
+            raise ExtractionError(f"{criterion_id}: ID_Normalizador {normalizer_id} no existe en 14_Normalizadores_Entrada")
+        result[field_id] = CriterioExtraccion(
+            criterion_id,
+            field_id,
+            row.get("Fuente_Principal", "").strip(),
+            row.get("Documento_Contraste", "").strip(),
+            _semantic_parts(row.get("Anclas_Positivas", "")),
+            row.get("Regla_Valor", "").strip(),
+            _semantic_parts(row.get("Exclusiones", "")),
+            row.get("Zona_Preferida", "").strip(),
+            row.get("Cardinalidad", "").strip(),
+            row.get("Clave_Entidad", "").strip(),
+            normalizer_id,
+            precedence,
+            confidence,
+            row.get("Fallback", "").strip(),
+        )
+    return result
 
 
 def load_extraction_fields(configuration: ProjectConfiguration) -> tuple[CampoExtraccion, ...]:
@@ -795,6 +882,69 @@ def _select_candidates(candidates: tuple[_Candidate, ...], field: CampoExtraccio
     return tuple(sorted(values, key=lambda item: (-item.puntaje, _normalizar(item.valor)))[:40])
 
 
+def _canonical_input(value: str, normalizer_id: str) -> str:
+    """Aplica la operación técnica seleccionada por el ID de arquitectura."""
+    normalizer = normalizer_id.strip().upper()
+    raw = " ".join(value.split()).strip(" .,:;")
+    if normalizer in {"NORM_DOCUMENTO", "NORM_NUMERO_DOCUMENTO"}:
+        match = re.search(r"\d[\d.\s-]{3,}\d(?:-\d)?", raw)
+        return re.sub(r"[.\s]", "", match.group(0)) if match else re.sub(r"[.\s]", "", raw)
+    if normalizer == "NORM_MATRICULA":
+        compact = re.sub(r"\s*[-–—]\s*", "-", raw.upper())
+        match = re.search(r"(?<!\d)(\d{1,3}-\d{3,})(?!\d)", compact)
+        return match.group(1) if match else compact
+    if normalizer in {"NORM_NOMBRE", "NORM_PERSONA"}:
+        return " ".join(raw.upper().split())
+    if normalizer == "NORM_TIPO_DOCUMENTO":
+        normalized = _normalizar(raw)
+        if "cedula" in normalized and "extranjer" in normalized:
+            return "CÉDULA DE EXTRANJERÍA"
+        if "cedula" in normalized or normalized in {"cc", "c c"}:
+            return "CÉDULA DE CIUDADANÍA"
+        if "nit" in normalized:
+            return "NIT"
+        if "pasaporte" in normalized:
+            return "PASAPORTE"
+    if normalizer in {"NORM_TEXTO_JURIDICO", "NORM_DIRECCION"}:
+        return _normalizar(raw)
+    return raw
+
+
+def _criterion_accepts(
+    candidate: _Candidate,
+    page_text: str,
+    criterion: CriterioExtraccion | None,
+) -> bool:
+    if criterion is None:
+        return True
+    evidence = _normalizar(candidate.evidencia)
+    normalized_page = _normalizar(page_text)
+    if any(_normalizar(term) in evidence for term in criterion.exclusiones):
+        return False
+    if criterion.anclas_positivas and not any(
+        _normalizar(anchor) in normalized_page for anchor in criterion.anclas_positivas
+    ):
+        # Las anclas son obligatorias para dominios con alto riesgo de falsos
+        # positivos; los demás campos conservan el extractor genérico.
+        if criterion.id_normalizador in {"NORM_MATRICULA", "NORM_DOCUMENTO", "NORM_TIPO_DOCUMENTO"}:
+            return False
+    if criterion.id_normalizador == "NORM_MATRICULA":
+        canonical = _canonical_input(candidate.valor, criterion.id_normalizador)
+        match = re.fullmatch(r"(\d{1,3})-(\d{3,})", canonical)
+        if not match:
+            return False
+        # Evita interpretar mes-año como matrícula si el fragmento no contiene
+        # contexto registral explícito.
+        if int(match.group(1)) <= 12 and len(match.group(2)) == 4 and 1900 <= int(match.group(2)) <= 2100:
+            if not any(_normalizar(anchor) in evidence for anchor in criterion.anclas_positivas):
+                return False
+    if criterion.id_normalizador == "NORM_DOCUMENTO":
+        digits = re.sub(r"\D", "", _canonical_input(candidate.valor, criterion.id_normalizador))
+        if not 5 <= len(digits) <= 12:
+            return False
+    return True
+
+
 def _extract_values(
     field: CampoExtraccion,
     instruction: InstruccionExtraccion,
@@ -802,6 +952,8 @@ def _extract_values(
     related_labels: tuple[str, ...] = (),
     inherited: bool = False,
     catalog_values: tuple[str, ...] = (),
+    criterion: CriterioExtraccion | None = None,
+    documento_logico_id: str | None = None,
 ) -> tuple[EvidenciaExtraccion, ...]:
     """Extrae sin descartar líneas repetidas y respeta Permite_OCR por página."""
     values: list[EvidenciaExtraccion] = []
@@ -843,6 +995,11 @@ def _extract_values(
                 prioridad=_priority(instruction.prioridad),
                 heredado=inherited,
                 calidad=100,
+                valor_normalizado=_canonical_input(assigned, criterion.id_normalizador) if criterion else assigned,
+                id_criterio=criterion.id_criterio if criterion else None,
+                documento_logico_id=documento_logico_id,
+                confianza_semantica=1.0,
+                estado_verificacion_ocr=str(page.get("estado_verificacion", "No requerida")),
             ),)
         raw_candidates = _typed_candidates(
             text, field, instruction, related_labels, catalog_values
@@ -866,10 +1023,16 @@ def _extract_values(
         adjusted_candidates = tuple(
             candidate for candidate in adjusted_candidates
             if candidate.puntaje >= 80
+            and _criterion_accepts(candidate, text, criterion)
+            and (
+                criterion is None
+                or min(1.0, max(0.0, candidate.puntaje / 150)) >= criterion.confianza_minima
+            )
         )
         selected = _select_candidates(adjusted_candidates, field)
         for candidate in selected:
             confidence = page.get("confianza")
+            semantic_confidence = min(1.0, max(0.0, candidate.puntaje / 150))
             values.append(EvidenciaExtraccion(
                 valor_encontrado=candidate.valor,
                 documento=str(page.get("documento", "")),
@@ -886,6 +1049,11 @@ def _extract_values(
                 prioridad=_priority(instruction.prioridad),
                 heredado=inherited,
                 calidad=candidate.puntaje,
+                valor_normalizado=_canonical_input(candidate.valor, criterion.id_normalizador) if criterion else candidate.valor,
+                id_criterio=criterion.id_criterio if criterion else None,
+                documento_logico_id=documento_logico_id,
+                confianza_semantica=round(semantic_confidence, 4),
+                estado_verificacion_ocr=str(page.get("estado_verificacion", "No requerida")),
             ))
     unique: dict[
         tuple[str, str, int, str, str | None],
@@ -921,6 +1089,8 @@ def _source_match_kind(
     for candidate in (
         document.get("codigo_tipo_documental"),
         document.get("tipo_documental"),
+        document.get("tipo_documental_fisico"),
+        document.get("rol_documental"),
     ):
         if not isinstance(candidate, str):
             continue
@@ -1335,6 +1505,7 @@ def extract_expediente_data(project_root: Path, expediente_id: str) -> Resultado
     except ConfigurationError as error:
         raise ExtractionError(str(error)) from error
     fields, instructions = _read_extraction_architecture(configuration)
+    criteria = _read_extraction_criteria(configuration)
     catalogs = _read_extraction_catalogs(configuration)
     ocr = _load_json(_ocr_path(configuration, expediente_id), "el resultado OCR")
     classification = _load_json(_classification_path(configuration, expediente_id), "la clasificación documental")
@@ -1493,6 +1664,8 @@ def extract_expediente_data(project_root: Path, expediente_id: str) -> Resultado
                     related_labels,
                     inherited,
                     catalogs.get(field.catalogo_asociado or "", ()),
+                    criteria.get(field.id_campo),
+                    str(_document.get("documento_logico_id") or "") or None,
                 ))
 
         best_quality: dict[tuple[str, str | None], int] = {}

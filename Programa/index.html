@@ -415,6 +415,33 @@
             gap: 8px;
         }
 
+        .review-validations {
+            display: grid;
+            gap: 8px;
+            max-height: 240px;
+            overflow: auto;
+        }
+
+        .review-validation-item {
+            display: grid;
+            grid-template-columns: minmax(140px, 1fr) 130px;
+            gap: 8px;
+            align-items: center;
+            padding: 8px;
+            border: 1px solid #dbe4f0;
+            border-radius: 8px;
+            font-size: 0.76rem;
+        }
+
+        .review-validation-item textarea {
+            grid-column: 1 / -1;
+            min-height: 48px;
+            padding: 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            resize: vertical;
+        }
+
         .btn-review {
             padding: 10px;
             border: none;
@@ -524,6 +551,7 @@
 
             <div class="review-panel" id="review-panel" hidden>
                 <div class="review-status" id="review-status">Revisión del analista: Pendiente</div>
+                <div class="review-validations" id="review-validations"></div>
                 <textarea
                     class="review-observation"
                     id="review-observation"
@@ -555,6 +583,7 @@
         const btnGenerate = document.getElementById('btn-generate');
         const reviewPanel = document.getElementById('review-panel');
         const reviewStatus = document.getElementById('review-status');
+        const reviewValidations = document.getElementById('review-validations');
         const reviewObservation = document.getElementById('review-observation');
         const btnReviewConfirm = document.getElementById('btn-review-confirm');
         const btnReviewReject = document.getElementById('btn-review-reject');
@@ -603,6 +632,28 @@
             preliminaryResult = review?.resultado_preliminar || preliminaryResult;
             reviewPanel.hidden = false;
             reviewStatus.textContent = `Resultado preliminar: ${preliminaryResult || 'No disponible'} · Revisión del analista: ${state}`;
+            reviewValidations.replaceChildren();
+            for (const validation of Array.isArray(review?.validaciones) ? review.validaciones : []) {
+                const item = document.createElement('div');
+                item.className = 'review-validation-item';
+                item.dataset.ruleId = validation.id_regla;
+                const label = document.createElement('span');
+                label.textContent = `${validation.id_regla} · Sistema: ${validation.estado_sistema}`;
+                const select = document.createElement('select');
+                select.setAttribute('aria-label', `Revisión ${validation.id_regla}`);
+                for (const stateOption of ['Pendiente', 'Confirmada', 'Observada']) {
+                    const option = document.createElement('option');
+                    option.value = stateOption;
+                    option.textContent = stateOption;
+                    option.selected = validation.estado_revision === stateOption;
+                    select.appendChild(option);
+                }
+                const note = document.createElement('textarea');
+                note.placeholder = 'Observación de esta comprobación';
+                note.value = validation.observacion || '';
+                item.append(label, select, note);
+                reviewValidations.appendChild(item);
+            }
             btnGenerate.disabled = state !== 'Confirmado';
             btnGenerate.setAttribute('aria-disabled', String(btnGenerate.disabled));
         };
@@ -610,6 +661,7 @@
         const resetReview = () => {
             preliminaryResult = '';
             reviewObservation.value = '';
+            reviewValidations.replaceChildren();
             reviewPanel.hidden = true;
             btnGenerate.disabled = true;
             btnGenerate.setAttribute('aria-disabled', 'true');
@@ -678,25 +730,27 @@
         };
 
         const renderTraceability = result => {
-            const rules = Array.isArray(result.validacion?.reglas) ? result.validacion.reglas : [];
+            const fields = Array.isArray(result.trazabilidad?.campos_obligatorios)
+                ? result.trazabilidad.campos_obligatorios
+                : [];
             const lines = [];
-            if (!rules.length) {
+            if (!fields.length) {
                 lines.push('No se registraron validaciones.');
             }
-            for (const [index, rule] of rules.entries()) {
-                const comparison = Array.isArray(rule.comparaciones) ? (rule.comparaciones[0] || {}) : {};
-                const page = Number(comparison.pagina_validada || comparison.pagina_origen?.[0] || 0);
-                const documentName = visibleText(
-                    comparison.documento_validado || comparison.documento_origen,
-                    'No identificado'
-                ).replaceAll('\\', '/').split('/').pop();
+            for (const [index, field] of fields.entries()) {
+                const page = Number(field.pagina || 0);
+                const resultText = field.estado_validacion === 'Cumple'
+                    ? 'Coincide con el dato que también se encuentra en el documento para firma_escritura.'
+                    : field.estado_validacion === 'No cumple'
+                        ? 'No coincide con el dato de la escritura para firma.'
+                        : 'No coincide: no existe evidencia suficiente para efectuar el contraste.';
                 lines.push(
                     index ? '' : null,
-                    `${index + 1}. ${visibleText(rule.id_regla, 'Regla no identificada')} · ${visibleText(rule.estado, 'Sin estado')}`,
-                    `- Tipo: ${visibleText(rule.tipo_regla, 'No identificado')}`,
-                    `- Documento: ${documentName}`,
-                    `- Página: ${Number.isFinite(page) ? page : 0}`,
-                    `- Observación: ${visibleText(rule.observacion || comparison.observacion, 'Sin observación')}`
+                    `${index + 1}. ${visibleText(field.datos, 'Dato no identificado')}`,
+                    `- Valor encontrado: ${visibleText(field.valor_encontrado, 'No se encontró información')}`,
+                    `- Documento validado: ${visibleText(field.documento_validado, 'No identificado')}`,
+                    `- Página: ${Number.isInteger(page) && page > 0 ? page : 0}`,
+                    `- Resultado: ${resultText}`
                 );
             }
             showMessage(outputInfo, lines.filter(line => line !== null).join('\n'));
@@ -877,7 +931,12 @@
             const result = await request('/api/revision/analista', {
                 id_expediente: selectedSelectionId,
                 decision,
-                observacion: reviewObservation.value
+                observacion: reviewObservation.value,
+                validaciones: Array.from(reviewValidations.querySelectorAll('.review-validation-item')).map(item => ({
+                    id_regla: item.dataset.ruleId,
+                    estado_revision: item.querySelector('select').value,
+                    observacion: item.querySelector('textarea').value
+                }))
             });
             if (result.error) {
                 reviewStatus.textContent = result.error;
@@ -896,7 +955,7 @@
                 id_expediente: selectedSelectionId
             });
             showMessage(outputSummary, result.mensaje || 'No fue posible continuar con la generación.');
-            showMessage(outputInfo, result.detalle || result.error || 'Revise la autorización del analista.');
+            showSystemStatus(result.detalle || result.error || 'Revise la autorización del analista.');
         });
     </script>
 </body>

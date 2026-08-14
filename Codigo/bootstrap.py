@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,7 +44,12 @@ def _create_logger(log_directory: Path) -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = False
     if not logger.handlers:
-        handler = logging.FileHandler(log_directory / "inicializacion.log", encoding="utf-8")
+        try:
+            handler = logging.FileHandler(log_directory / "inicializacion.log", encoding="utf-8")
+        except PermissionError:
+            handler = logging.FileHandler(
+                log_directory / f"inicializacion-{os.getpid()}.log", encoding="utf-8"
+            )
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         logger.addHandler(handler)
     return logger

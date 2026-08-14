@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
+from difflib import SequenceMatcher
 from io import BytesIO
 from pathlib import Path
 from statistics import mean
@@ -41,6 +42,10 @@ class TextoExtraido:
     texto: str
     metodo: str
     confianza: float | None = None
+    texto_segunda_lectura: str | None = None
+    confianza_segunda_lectura: float | None = None
+    coincidencia_lecturas: float | None = None
+    estado_verificacion: str = "No requerida"
 
 
 @dataclass(frozen=True)
@@ -99,11 +104,19 @@ def _read_digital_pdf(path: Path) -> list[str]:
         raise OCRExtractionError(f"No fue posible leer el PDF: {error}") from error
 
 
-def _run_tesseract(image_path: Path, language: str, command: str, include_confidence: bool) -> tuple[str, float | None]:
+def _run_tesseract(
+    image_path: Path,
+    language: str,
+    command: str,
+    include_confidence: bool,
+    psm: int | None = None,
+) -> tuple[str, float | None]:
     executable = shutil.which(command)
     if executable is None:
         raise OCRExtractionError(f"No se encontró el ejecutable OCR configurado: {command}")
     base_command = [executable, str(image_path), "stdout", "-l", language]
+    if psm is not None:
+        base_command.extend(["--psm", str(psm)])
     try:
         if not include_confidence:
             result = subprocess.run(base_command, check=True, capture_output=True, text=True, encoding="utf-8")
@@ -132,13 +145,19 @@ def _run_tesseract(image_path: Path, language: str, command: str, include_confid
 
 
 def _run_tesseract_bytes(
-    image_content: bytes, language: str, command: str, include_confidence: bool
+    image_content: bytes,
+    language: str,
+    command: str,
+    include_confidence: bool,
+    psm: int | None = None,
 ) -> tuple[str, float | None]:
     """Ejecuta OCR desde entrada estándar para no crear una copia del archivo seleccionado."""
     executable = shutil.which(command)
     if executable is None:
         raise OCRExtractionError(f"No se encontró el ejecutable OCR configurado: {command}")
     base_command = [executable, "stdin", "stdout", "-l", language]
+    if psm is not None:
+        base_command.extend(["--psm", str(psm)])
     try:
         result = subprocess.run(
             [*base_command, "tsv"] if include_confidence else base_command,
@@ -169,6 +188,70 @@ def _run_tesseract_bytes(
                 values.append(confidence)
     text = "\n".join(" ".join(words) for words in words_by_line.values()).strip()
     return text, round(mean(values), 2) if values else None
+
+
+def _text_similarity(first: str, second: str) -> float:
+    left = " ".join(first.casefold().split())
+    right = " ".join(second.casefold().split())
+    if not left and not right:
+        return 1.0
+    if not left or not right:
+        return 0.0
+    return round(SequenceMatcher(None, left, right).ratio(), 4)
+
+
+def _verified_ocr_file(
+    image_path: Path,
+    configuration: ProjectConfiguration,
+) -> tuple[str, float | None, str | None, float | None, float | None, str]:
+    language = str(_ocr_setting(configuration, "idioma", "spa"))
+    command = str(_ocr_setting(configuration, "comando_tesseract", "tesseract"))
+    include_confidence = bool(_ocr_setting(configuration, "registrar_confianza", True))
+    primary_psm = int(_ocr_setting(configuration, "psm_primario", 3))
+    primary_text, primary_confidence = _run_tesseract(
+        image_path, language, command, include_confidence, primary_psm
+    )
+    enabled = bool(_ocr_setting(configuration, "doble_lectura_condicional", False))
+    threshold = float(_ocr_setting(configuration, "umbral_confianza_segunda_lectura", 85))
+    if not enabled or (primary_text and primary_confidence is not None and primary_confidence >= threshold):
+        return primary_text, primary_confidence, None, None, None, "No requerida"
+    secondary_psm = int(_ocr_setting(configuration, "psm_secundario", 6))
+    secondary_text, secondary_confidence = _run_tesseract(
+        image_path, language, command, include_confidence, secondary_psm
+    )
+    similarity = _text_similarity(primary_text, secondary_text)
+    minimum_similarity = float(_ocr_setting(configuration, "umbral_coincidencia_segunda_lectura", 0.72))
+    state = "Coincidente" if similarity >= minimum_similarity else "Divergente; revisión semántica requerida"
+    if (secondary_confidence or -1) > (primary_confidence or -1):
+        return secondary_text, secondary_confidence, primary_text, primary_confidence, similarity, state
+    return primary_text, primary_confidence, secondary_text, secondary_confidence, similarity, state
+
+
+def _verified_ocr_bytes(
+    image_content: bytes,
+    configuration: ProjectConfiguration,
+) -> tuple[str, float | None, str | None, float | None, float | None, str]:
+    language = str(_ocr_setting(configuration, "idioma", "spa"))
+    command = str(_ocr_setting(configuration, "comando_tesseract", "tesseract"))
+    include_confidence = bool(_ocr_setting(configuration, "registrar_confianza", True))
+    primary_psm = int(_ocr_setting(configuration, "psm_primario", 3))
+    primary_text, primary_confidence = _run_tesseract_bytes(
+        image_content, language, command, include_confidence, primary_psm
+    )
+    enabled = bool(_ocr_setting(configuration, "doble_lectura_condicional", False))
+    threshold = float(_ocr_setting(configuration, "umbral_confianza_segunda_lectura", 85))
+    if not enabled or (primary_text and primary_confidence is not None and primary_confidence >= threshold):
+        return primary_text, primary_confidence, None, None, None, "No requerida"
+    secondary_psm = int(_ocr_setting(configuration, "psm_secundario", 6))
+    secondary_text, secondary_confidence = _run_tesseract_bytes(
+        image_content, language, command, include_confidence, secondary_psm
+    )
+    similarity = _text_similarity(primary_text, secondary_text)
+    minimum_similarity = float(_ocr_setting(configuration, "umbral_coincidencia_segunda_lectura", 0.72))
+    state = "Coincidente" if similarity >= minimum_similarity else "Divergente; revisión semántica requerida"
+    if (secondary_confidence or -1) > (primary_confidence or -1):
+        return secondary_text, secondary_confidence, primary_text, primary_confidence, similarity, state
+    return primary_text, primary_confidence, secondary_text, secondary_confidence, similarity, state
 
 
 def _render_pdfium_page_bytes(content: bytes, page_number: int, resolution: int) -> bytes:
@@ -295,10 +378,20 @@ def _extract_pdf(
             progress(document.ubicacion_original, number, "Aplicando OCR al PDF escaneado")
         rendered_page = _render_pdf_page(path, number, renderer, resolution)
         try:
-            ocr_text, confidence = _run_tesseract(rendered_page, language, tesseract, include_confidence)
+            verified = _verified_ocr_file(rendered_page, configuration)
         finally:
             shutil.rmtree(rendered_page.parent, ignore_errors=True)
-        results.append(TextoExtraido(document.ubicacion_original, number, ocr_text, "OCR PDF escaneado", confidence))
+        results.append(TextoExtraido(
+            document.ubicacion_original,
+            number,
+            verified[0],
+            "OCR PDF escaneado",
+            verified[1],
+            verified[2],
+            verified[3],
+            verified[4],
+            verified[5],
+        ))
     return results
 
 
@@ -312,13 +405,11 @@ def _extract_image(
         raise OCRExtractionError("El OCR de imágenes está deshabilitado en la configuración")
     if progress:
         progress(document.ubicacion_original, 1, "Aplicando OCR a la imagen")
-    text, confidence = _run_tesseract(
-        path,
-        str(_ocr_setting(configuration, "idioma", "spa")),
-        str(_ocr_setting(configuration, "comando_tesseract", "tesseract")),
-        bool(_ocr_setting(configuration, "registrar_confianza", True)),
-    )
-    return [TextoExtraido(document.ubicacion_original, 1, text, "OCR imagen", confidence)]
+    verified = _verified_ocr_file(path, configuration)
+    return [TextoExtraido(
+        document.ubicacion_original, 1, verified[0], "OCR imagen", verified[1],
+        verified[2], verified[3], verified[4], verified[5]
+    )]
 
 
 def _extract_docx(
@@ -378,18 +469,29 @@ def _extract_memory_document(
                 int(_ocr_setting(configuration, "resolucion_pdf", 300)),
                 renderer,
             )
-            ocr_text, confidence = _run_tesseract_bytes(
-                image_content, language, tesseract, include_confidence
-            )
-            results.append(TextoExtraido(document.ubicacion_original, number, ocr_text, "OCR PDF escaneado", confidence))
+            verified = _verified_ocr_bytes(image_content, configuration)
+            results.append(TextoExtraido(
+                document.ubicacion_original,
+                number,
+                verified[0],
+                "OCR PDF escaneado",
+                verified[1],
+                verified[2],
+                verified[3],
+                verified[4],
+                verified[5],
+            ))
         return results
     if document.categoria == "Imagen":
         if not bool(_ocr_setting(configuration, "permitir_imagenes", True)):
             raise OCRExtractionError("El OCR de imágenes está deshabilitado en la configuración")
         if progress:
             progress(document.ubicacion_original, 1, "Aplicando OCR a la imagen")
-        text, confidence = _run_tesseract_bytes(content, language, tesseract, include_confidence)
-        return [TextoExtraido(document.ubicacion_original, 1, text, "OCR imagen", confidence)]
+        verified = _verified_ocr_bytes(content, configuration)
+        return [TextoExtraido(
+            document.ubicacion_original, 1, verified[0], "OCR imagen", verified[1],
+            verified[2], verified[3], verified[4], verified[5]
+        )]
     if Path(document.nombre).suffix.casefold() == ".docx":
         if progress:
             progress(document.ubicacion_original, 1, "Extrayendo texto del documento Word")

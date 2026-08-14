@@ -36,10 +36,20 @@ Thumbs.db
 # -------------------------------
 
 Expedientes/**/03_Resultados/
+!Expedientes/Pruebas/Casos_Conformidad/_PLANTILLA_CASO/03_Resultados/
+!Expedientes/Pruebas/Casos_Conformidad/_PLANTILLA_CASO/03_Resultados/.gitkeep
+!Expedientes/Pruebas/Casos_No_Conformidad/_PLANTILLA_CASO/03_Resultados/
+!Expedientes/Pruebas/Casos_No_Conformidad/_PLANTILLA_CASO/03_Resultados/.gitkeep
 Salida/**
 
 # Los casos jurídicos sensibles se almacenan fuera del repositorio.
 Conocimiento/Casos/
+
+# Corpus local de regresión. Las plantillas y el README permanecen versionados,
+# pero los expedientes CON/NC, sus documentos y los JSON derivados no ingresan
+# al repositorio porque contienen información jurídica y datos personales.
+Expedientes/Pruebas/Casos_Conformidad/CON-*/
+Expedientes/Pruebas/Casos_No_Conformidad/NC-*/
 
 # -------------------------------
 # Archivos de trabajo

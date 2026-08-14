@@ -37,6 +37,14 @@ Los casos conservados fuera del proyecto son antecedentes de consulta humana.
 No se configuran como entrada del motor, no se consultan durante el análisis y
 no reemplazan las reglas de `Arquitectura.xlsx`.
 
+Los casos locales de regresión autorizados se organizan en
+`Expedientes/Pruebas/Casos_Conformidad` y
+`Expedientes/Pruebas/Casos_No_Conformidad`. Sus documentos y JSON derivados
+están excluidos del repositorio por contener información jurídica sensible. El
+formato, la doble verificación y las fuentes de verdad se documentan en
+`Expedientes/Pruebas/README.md`. Estos casos no se consultan durante la
+ejecución normal ni agregan reglas a la arquitectura.
+
 Programa/
 Contiene el código fuente del sistema.
 
@@ -334,6 +342,104 @@ Para probarlo, ejecute:
 python -m unittest tests.test_motor_juridico -v
 ```
 
+---
+
+# Ciclo integral de análisis y generación
+
+El flujo vigente es:
+
+```text
+Selección en memoria
+→ OCR por página y segunda lectura condicional
+→ Segmentación lógica
+→ Clasificación por perfil físico y rol documental
+→ Extracción con criterio y normalizador de entrada
+→ Normalización de salida
+→ Validación contra documentos fuente, minuta y poderes
+→ Dictamen jurídico y trazabilidad
+→ Revisión individual y decisión del analista
+→ Certificado Word
+→ PDF
+```
+
+La arquitectura incorpora las hojas `11_Perfiles_Documentales`,
+`12_Roles_Documentales`, `13_Criterios_Extraccion`,
+`14_Normalizadores_Entrada` y `15_Segmentacion_Documental`. Las nuevas fases
+conservan documento físico, documento lógico, página, valor bruto, valor
+normalizado, método, confianza OCR, segunda lectura y confianza semántica.
+
+La interfaz mantiene una distribución 30% para ingreso y 70% para resultados.
+Durante el procesamiento muestra únicamente `Concepto en curso` y
+`Validaciones en curso` dentro de los campos de resultados; la etapa OCR y la
+página se muestran en la barra de estado. Al terminar, **Validaciones
+realizadas** enumera cada dato obligatorio con valor fuente, documento
+contrastado, página numérica y resultado frente a la escritura.
+
+## Regla permanente del consecutivo
+
+La regla `DOC-002` de `04_Reglas_Negocio` establece que el consecutivo es
+responsabilidad exclusiva del analista. GIOJ no lo extrae, calcula, solicita ni
+reemplaza. No existe marcador `{{CONSECUTIVO}}`; la línea de ambas plantillas
+permanece en blanco para su diligenciamiento manual después de generar el
+documento.
+
+## Generación oficial
+
+Después de confirmar todas las comprobaciones, **Generar Documento** crea en
+`Salida/{id_expediente}/`:
+
+- `Certificado_Conformidad_{id_expediente}.docx` y su PDF; o
+- `Certificado_No_Conformidad_{id_expediente}.docx` y su PDF.
+
+Solo se reemplazan los marcadores de `09_Marcadores_Documento`. La salida de
+no conformidad incorpora la lista de omisiones y discordancias confirmadas. La
+conversión intenta LibreOffice en modo no interactivo y, en Windows, Microsoft
+Word como alternativa. El entorno requiere `pypdf` y `lxml`, declarados en
+`requirements.txt`.
+
+## Pruebas automatizadas
+
+Desde la raíz:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+`tests/test_ciclo_integral.py` protege la regla manual del consecutivo, hashes
+de plantillas, perfiles, segunda lectura OCR, falsos positivos de matrícula,
+revisión individual, generación de ambos dictámenes y el corpus local de diez
+casos positivos y diez negativos, con 65 hallazgos negativos verificados.
+
+## Prueba manual de conformidad
+
+1. Inicie `python -m Codigo interfaz --puerto 8000` y abra
+   `http://127.0.0.1:8000/`.
+2. Seleccione todos los documentos de
+   `Expedientes/Pruebas/Casos_Conformidad/CON-005/01_Documentos`.
+3. Pulse **Iniciar análisis**. Verifique `Concepto en curso`, `Validaciones en
+   curso` y el avance técnico únicamente en la barra de estado.
+4. Compruebe que Nombre muestre `JAVIER ALFONSO GARCIA CARVAJAL`, tipo de
+   documento `Cédula de ciudadanía` y número `91292114`, todos vinculados a
+   `CEDULA JAVIER.pdf`, página `1`.
+5. Revise cada comprobación y márquela `Confirmada` u `Observada`; si observa
+   una regla, registre su explicación. Confirme el análisis.
+6. Genere el documento. Abra Word y PDF, verifique los datos reemplazados, la
+   ausencia de marcadores pendientes y la línea de consecutivo en blanco.
+
+## Prueba manual de no conformidad
+
+1. Seleccione un caso de
+   `Expedientes/Pruebas/Casos_No_Conformidad/NC-001/01_Documentos` a
+   `NC-010/01_Documentos`.
+2. Ejecute el análisis y compare cada hallazgo con
+   `03_Resultados/resultado_esperado.json` del mismo expediente.
+3. Verifique que el concepto explique las causas de no conformidad y que cada
+   validación indique dato, valor encontrado, documento, página y discordancia.
+4. Complete la revisión individual, confirme el análisis del sistema y genere
+   el certificado de no conformidad.
+5. Compruebe en Word y PDF que las observaciones enumeren la información
+   faltante o discordante, y que el consecutivo siga reservado al analista.
+
 ## Resultados esperados del ciclo
 
 - Todas las filas de `04_Reglas_Negocio` deben quedar evaluadas exactamente una
@@ -363,8 +469,11 @@ listado completo de comprobaciones. El analista debe registrar una decisión:
   a corregir o ejecutar un nuevo análisis.
 - Un nuevo análisis restablece siempre el estado a `Pendiente`.
 
-El endpoint de generación comprueba esta autorización, pero la creación del
-Word y la conversión a PDF continúan reservadas para GIOJ-012 y GIOJ-013.
+La revisión es individual por comprobación. Cada regla debe quedar como
+`Confirmada` u `Observada` antes de registrar la decisión global. El endpoint
+de generación exige estado global `Confirmado`, completa el Word oficial y lo
+convierte a PDF. Las plantillas fuente se verifican por hash antes y después y
+nunca se sobrescriben.
 
 ## Casos de regresión
 

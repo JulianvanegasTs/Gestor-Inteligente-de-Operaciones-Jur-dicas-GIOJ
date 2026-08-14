@@ -54,7 +54,12 @@
     "salida": "07_Salida_Analisis",
     "trazabilidad": "08_Trazabilidad",
     "marcadores": "09_Marcadores_Documento",
-    "formateadores": "10_Formateadores"
+    "formateadores": "10_Formateadores",
+    "perfiles_documentales": "11_Perfiles_Documentales",
+    "roles_documentales": "12_Roles_Documentales",
+    "criterios_extraccion": "13_Criterios_Extraccion",
+    "normalizadores_entrada": "14_Normalizadores_Entrada",
+    "segmentacion_documental": "15_Segmentacion_Documental"
   },
 
   "ocr": {
@@ -67,7 +72,18 @@
     "comando_tesseract": "tesseract",
     "comando_renderizador_pdf": "pdftoppm",
     "resolucion_pdf": 300,
+    "psm_primario": 3,
+    "psm_secundario": 6,
+    "doble_lectura_condicional": true,
+    "umbral_confianza_segunda_lectura": 85,
+    "umbral_coincidencia_segunda_lectura": 0.72,
     "archivo_salida": "texto_extraido.json"
+  },
+
+  "segmentacion": {
+    "archivo_salida": "segmentacion_documental.json",
+    "conservar_paginas_originales": true,
+    "bloquear_ambiguedades": true
   },
 
   "extraccion": {
@@ -92,7 +108,9 @@
     "estados_permitidos": ["Pendiente", "Confirmado", "Rechazado"],
     "estado_habilita_generacion": "Confirmado",
     "estado_rechazo": "Rechazado",
-    "observacion_obligatoria_al_rechazar": true
+    "observacion_obligatoria_al_rechazar": true,
+    "revision_individual_obligatoria": true,
+    "estados_revision_validacion": ["Pendiente", "Confirmada", "Observada"]
   },
 
   "analisis": {
@@ -105,7 +123,7 @@
     "tipo_documental_base": "Escritura_Firma",
     "estado_interfaz_valido": "Validado",
     "estado_interfaz_invalido": "No validado",
-    "umbral_coincidencia_clausula": 0.58,
+    "umbral_coincidencia_clausula": 0.8,
     "equivalencias_juridicas": {
       "sin limite de cuantia": ["cuantia indeterminada"]
     }
@@ -133,6 +151,24 @@
     "mostrar_trazabilidad": true,
     "guardar_json_extraccion": true,
     "guardar_json_validaciones": true
+  },
+
+  "generacion_documental": {
+    "archivo_control": "generacion_documental.json",
+    "nombre_word_conformidad": "Certificado_Conformidad_{id_expediente}.docx",
+    "nombre_word_no_conformidad": "Certificado_No_Conformidad_{id_expediente}.docx",
+    "convertidor_pdf": "auto",
+    "comando_libreoffice": "soffice",
+    "validar_marcadores_pendientes": true,
+    "preservar_hash_plantilla": true,
+    "consecutivo": {
+      "responsable": "Analista",
+      "modo": "manual",
+      "solicitar_en_interfaz": false,
+      "generar_automaticamente": false,
+      "marcador": null,
+      "regla_negocio": "DOC-002"
+    }
   },
 
   "ia": {

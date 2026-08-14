@@ -82,6 +82,10 @@ class RegistroCampoObligatorio:
     documento_validado: str
     pagina: int
     resultado: str
+    valor_escritura: str = ""
+    id_regla: str = ""
+    estado_validacion: str = ""
+    observacion: str = ""
 
 
 @dataclass(frozen=True)
@@ -306,7 +310,7 @@ def _evaluate_type(
     )
 
 
-def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
+def _legal_concept_legacy(result: str, validations: dict[str, dict[str, Any]]) -> str:
     failed = [
         item
         for rule_id, item in validations.items()
@@ -329,6 +333,34 @@ def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
         f"adversa(s) o sin evidencia suficiente. Hallazgos que requieren corrección: {details} "
         "El analista jurídico debe revisar la evidencia, confirmar o rechazar el análisis y su "
         "decisión no puede ser sustituida por este concepto."
+    )
+
+
+def _legal_concept(result: str, validations: dict[str, dict[str, Any]]) -> str:
+    """Redacta un dictamen legajista proporcional al resultado preliminar."""
+    failed = [
+        item for rule_id, item in validations.items()
+        if rule_id != "CON-001" and item.get("estado") in {"No cumple", "No existe información", "No existe informaciÃ³n"}
+    ]
+    if not failed:
+        return (
+            "Examinado integralmente el expediente, se confrontaron los datos obligatorios de la escritura "
+            "sometida a firma con sus documentos fuente, la minuta hipotecaria aplicable, la cadena de poderes "
+            "y los controles de integridad documental. La evidencia disponible acredita correspondencia suficiente "
+            "en la totalidad de las reglas bloqueantes aplicables; en consecuencia, se propone concepto preliminar "
+            "de Conformidad, sujeto a la revisión individual y confirmación del analista jurídico."
+        )
+    details = " ".join(
+        f"{index}. {item.get('id_regla', 'Regla no identificada')}: "
+        f"{item.get('observacion') or 'La evidencia registrada requiere corrección o complemento.'}"
+        for index, item in enumerate(failed, 1)
+    )
+    return (
+        f"Examinado integralmente el expediente y confrontada la escritura sometida a firma con sus fuentes "
+        f"documentales y reglas jurídicas rectoras, se registraron {len(failed)} comprobación(es) adversa(s) "
+        f"o carentes de evidencia suficiente. El análisis concluye {result} preliminar. Fundamentos: {details} "
+        "Las discordancias o ausencias deberán ser subsanadas y cada comprobación queda sometida a revisión "
+        "individual del analista jurídico, cuyo criterio profesional confirma o rechaza este dictamen de apoyo."
     )
 
 
@@ -408,7 +440,7 @@ def _document_name(value: Any, fallback: str) -> str:
     return document.rsplit("/", 1)[-1]
 
 
-def _mandatory_field_traceability(
+def _mandatory_field_traceability_legacy(
     fields: tuple[CampoExtraccion, ...],
     rules: tuple[ReglaNegocio, ...],
     validations: dict[str, dict[str, Any]],
@@ -457,6 +489,58 @@ def _mandatory_field_traceability(
                 ),
             )
         )
+    return tuple(records)
+
+
+def _mandatory_field_traceability(
+    fields: tuple[CampoExtraccion, ...],
+    rules: tuple[ReglaNegocio, ...],
+    validations: dict[str, dict[str, Any]],
+) -> tuple[RegistroCampoObligatorio, ...]:
+    """Expone cada valor obligatorio contrastado en el orden de la arquitectura."""
+    mandatory_fields = tuple(
+        field for field in fields if _normalizar(field.obligatorio or "") == "si"
+    )
+    mandatory_rules = {
+        _criterion(rule, "ID_Campo_Clausula"): rule
+        for rule in rules
+        if _normalizar(rule.tipo_regla) in {"campo obligatorio", "campo_obligatorio"}
+        and _criterion(rule, "ID_Campo_Clausula")
+    }
+    records: list[RegistroCampoObligatorio] = []
+    for field in mandatory_fields:
+        rule = mandatory_rules.get(field.id_campo)
+        validation = validations.get(rule.id_regla, {}) if rule else {}
+        raw = validation.get("comparaciones")
+        comparisons = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+        if not comparisons:
+            comparisons = [{}]
+        for comparison in comparisons:
+            state = str(comparison.get("estado") or validation.get("estado") or "No existe información")
+            source_value = _as_trace_text(comparison.get("valor_esperado"), "No se encontró información")
+            writing_value = _as_trace_text(comparison.get("valor_encontrado"), "No se encontró información en la escritura")
+            result_text = (
+                "Coincide con Escritura_Firma"
+                if state == "Cumple"
+                else "No coincide con Escritura_Firma"
+            )
+            records.append(RegistroCampoObligatorio(
+                datos=field.campo or field.id_campo,
+                valor_encontrado=source_value,
+                documento_validado=_document_name(
+                    comparison.get("documento_comparado"),
+                    _criterion(rule, "Documento_Comparado", "No identificado") if rule else "No identificado",
+                ),
+                pagina=_compared_page(comparison),
+                resultado=result_text,
+                valor_escritura=writing_value,
+                id_regla=rule.id_regla if rule else "",
+                estado_validacion=state,
+                observacion=_as_trace_text(
+                    comparison.get("observacion"),
+                    _as_trace_text(validation.get("observacion"), "Sin observación registrada"),
+                ),
+            ))
     return tuple(records)
 
 

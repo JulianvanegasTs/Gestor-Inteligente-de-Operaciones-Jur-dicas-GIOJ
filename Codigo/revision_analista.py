@@ -16,6 +16,14 @@ class AnalystReviewError(ValueError):
 
 
 @dataclass(frozen=True)
+class RevisionValidacionAnalista:
+    id_regla: str
+    estado_sistema: str
+    estado_revision: str
+    observacion: str = ""
+
+
+@dataclass(frozen=True)
 class RevisionAnalista:
     id_expediente: str
     resultado_preliminar: str
@@ -24,6 +32,9 @@ class RevisionAnalista:
     fecha_revision: str | None
     generacion_habilitada: bool
     archivo_salida: str
+    validaciones: tuple[RevisionValidacionAnalista, ...] = ()
+    total_validaciones: int = 0
+    validaciones_pendientes: int = 0
 
 
 @dataclass(frozen=True)
@@ -117,6 +128,30 @@ def _preliminary_result(configuration: ProjectConfiguration, expediente_id: str)
     return str(result)
 
 
+def _legal_validations(
+    configuration: ProjectConfiguration, expediente_id: str
+) -> tuple[RevisionValidacionAnalista, ...]:
+    try:
+        payload = _load_json(
+            _legal_result_path(configuration, expediente_id), "el resultado jurídico preliminar"
+        )
+    except AnalystReviewError:
+        # Compatibilidad para integraciones que entregan el resultado en memoria;
+        # el flujo productivo siempre persiste el motor antes de esta fase.
+        return ()
+    evaluations = payload.get("evaluaciones_reglas", [])
+    result: list[RevisionValidacionAnalista] = []
+    for item in evaluations if isinstance(evaluations, list) else []:
+        if not isinstance(item, dict) or not item.get("id_regla"):
+            continue
+        system_state = str(item.get("resultado_validacion", "No existe información"))
+        review_state = "Confirmada" if system_state == "No aplica" else "Pendiente"
+        result.append(RevisionValidacionAnalista(
+            str(item["id_regla"]), system_state, review_state, ""
+        ))
+    return tuple(result)
+
+
 def _save_review(
     configuration: ProjectConfiguration,
     expediente_id: str,
@@ -124,9 +159,11 @@ def _save_review(
     state: str,
     observation: str,
     review_date: str | None,
+    validations: tuple[RevisionValidacionAnalista, ...] = (),
 ) -> RevisionAnalista:
     path = _review_path(configuration, expediente_id)
     path.parent.mkdir(parents=True, exist_ok=True)
+    pending = sum(item.estado_revision == "Pendiente" for item in validations)
     review = RevisionAnalista(
         expediente_id,
         result,
@@ -135,6 +172,9 @@ def _save_review(
         review_date,
         state == _review_state(configuration, "estado_habilita_generacion", "Confirmado"),
         path.relative_to(configuration.project_root).as_posix(),
+        validations,
+        len(validations),
+        pending,
     )
     path.write_text(json.dumps(asdict(review), ensure_ascii=False, indent=2), encoding="utf-8")
     return review
@@ -151,7 +191,13 @@ def initialize_analyst_review(
     configuration = _configuration(project_root)
     initial_state = _review_state(configuration, "estado_inicial", "Pendiente")
     return _save_review(
-        configuration, expediente_id, preliminary_result, initial_state, "", None
+        configuration,
+        expediente_id,
+        preliminary_result,
+        initial_state,
+        "",
+        None,
+        _legal_validations(configuration, expediente_id),
     )
 
 
@@ -168,6 +214,18 @@ def load_analyst_review(project_root: Path, expediente_id: str) -> RevisionAnali
             str(payload["fecha_revision"]) if payload.get("fecha_revision") else None,
             bool(payload["generacion_habilitada"]),
             path.relative_to(configuration.project_root).as_posix(),
+            tuple(
+                RevisionValidacionAnalista(
+                    str(item["id_regla"]),
+                    str(item.get("estado_sistema", "")),
+                    str(item.get("estado_revision", "Pendiente")),
+                    str(item.get("observacion", "")),
+                )
+                for item in payload.get("validaciones", [])
+                if isinstance(item, dict) and item.get("id_regla")
+            ),
+            int(payload.get("total_validaciones", len(payload.get("validaciones", [])))),
+            int(payload.get("validaciones_pendientes", 0)),
         )
     except KeyError as error:
         raise AnalystReviewError("La revisión del analista está incompleta") from error
@@ -178,6 +236,7 @@ def record_analyst_review(
     expediente_id: str,
     state: str,
     observation: str = "",
+    validations: list[dict[str, Any]] | tuple[RevisionValidacionAnalista, ...] | None = None,
 ) -> RevisionAnalista:
     """Registra la confirmación o el rechazo emitido por el analista."""
     configuration = _configuration(project_root)
@@ -202,6 +261,48 @@ def record_analyst_review(
     if state == reject_state and observation_required and not cleaned_observation:
         raise AnalystReviewError("La observación es obligatoria cuando el análisis se rechaza")
     preliminary_result = _preliminary_result(configuration, expediente_id)
+    try:
+        current = load_analyst_review(project_root, expediente_id)
+    except AnalystReviewError:
+        current = RevisionAnalista(
+            expediente_id, preliminary_result, initial_state, "", None, False, ""
+        )
+    review_by_id = {item.id_regla: item for item in current.validaciones}
+    if validations is not None:
+        allowed_individual = {
+            str(item) for item in settings.get(
+                "estados_revision_validacion", ["Pendiente", "Confirmada", "Observada"]
+            )
+        }
+        for raw in validations:
+            item = raw if isinstance(raw, RevisionValidacionAnalista) else None
+            if item is None and isinstance(raw, dict):
+                rule_id = str(raw.get("id_regla", "")).strip()
+                review_state = str(raw.get("estado_revision", "")).strip()
+                note = str(raw.get("observacion", "")).strip()
+                previous = review_by_id.get(rule_id)
+                if not previous:
+                    raise AnalystReviewError(
+                        f"La validación {rule_id or '(sin ID)'} no pertenece al análisis"
+                    )
+                item = RevisionValidacionAnalista(
+                    rule_id, previous.estado_sistema, review_state, note
+                )
+            if item is None or item.estado_revision not in allowed_individual:
+                raise AnalystReviewError("La revisión individual contiene un estado no permitido")
+            if item.estado_revision == "Observada" and not item.observacion.strip():
+                raise AnalystReviewError(f"La observación es obligatoria para {item.id_regla}")
+            review_by_id[item.id_regla] = item
+    individual = tuple(
+        review_by_id[item.id_regla] for item in current.validaciones
+    )
+    individual_required = bool(settings.get("revision_individual_obligatoria", False))
+    pending = [item.id_regla for item in individual if item.estado_revision == "Pendiente"]
+    if individual_required and pending:
+        raise AnalystReviewError(
+            "Revise individualmente todas las comprobaciones antes de decidir: "
+            + ", ".join(pending)
+        )
     return _save_review(
         configuration,
         expediente_id,
@@ -209,6 +310,7 @@ def record_analyst_review(
         state,
         cleaned_observation,
         datetime.now(timezone.utc).isoformat(),
+        individual,
     )
 
 

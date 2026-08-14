@@ -38,6 +38,26 @@ class DocumentTypeDefinition:
 
 
 @dataclass(frozen=True)
+class DocumentProfile:
+    """Perfil físico y señales discriminantes de ``11_Perfiles_Documentales``."""
+
+    id_perfil: str
+    codigo_tipo: str
+    tipo_documental: str
+    senales_obligatorias: tuple[str, ...]
+    senales_positivas: tuple[str, ...]
+    senales_negativas: tuple[str, ...]
+    zona: str
+    umbral: float
+
+
+@dataclass(frozen=True)
+class DocumentRole:
+    id_rol: str
+    rol_documental: str
+
+
+@dataclass(frozen=True)
 class EvidenciaClasificacion:
     """Coincidencia que explica por qué se asignó un tipo documental."""
 
@@ -55,6 +75,10 @@ class DocumentoClasificado:
     estado: str
     evidencias: tuple[EvidenciaClasificacion, ...]
     observacion: str
+    documento_logico_id: str | None = None
+    tipo_documental_fisico: str | None = None
+    rol_documental: str | None = None
+    confianza: float | None = None
 
 
 @dataclass(frozen=True)
@@ -167,17 +191,64 @@ def _architecture_sheets(configuration: ProjectConfiguration) -> dict[str, list[
                 "catalogos": configuration.values["hojas"]["catalogos"],
                 "extraccion": configuration.values["hojas"]["extraccion"],
             }
+            optional = {
+                "perfiles": configuration.values.get("hojas", {}).get("perfiles_documentales"),
+                "roles": configuration.values.get("hojas", {}).get("roles_documentales"),
+            }
             sheets = {
                 key: _read_sheet(workbook, paths[name], shared_strings)
                 for key, name in requested.items()
                 if name in paths
             }
+            sheets.update({
+                key: _read_sheet(workbook, paths[str(name)], shared_strings)
+                for key, name in optional.items()
+                if name and str(name) in paths
+            })
     except (OSError, zipfile.BadZipFile, KeyError) as error:
         raise ClassificationError(f"No fue posible abrir Arquitectura.xlsx: {error}") from error
     missing = {"campos", "matriz", "catalogos", "extraccion"} - sheets.keys()
     if missing:
         raise ClassificationError(f"Faltan hojas necesarias para clasificar: {', '.join(sorted(missing))}")
     return sheets
+
+
+def _split_expressions(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split("|") if item.strip())
+
+
+def load_document_profiles(configuration: ProjectConfiguration) -> tuple[DocumentProfile, ...]:
+    """Carga perfiles fuertes; los proyectos antiguos conservan el clasificador previo."""
+    rows = _architecture_sheets(configuration).get("perfiles", [])
+    profiles: list[DocumentProfile] = []
+    for row in rows:
+        profile_id = row.get("ID_Perfil", "").strip()
+        if not profile_id:
+            continue
+        try:
+            threshold = float(row.get("Umbral", "0") or 0)
+        except ValueError:
+            threshold = 0
+        profiles.append(DocumentProfile(
+            profile_id,
+            row.get("Codigo_Tipo", "").strip(),
+            row.get("Tipo_Documental_Fisico", "").strip(),
+            _split_expressions(row.get("Senal_Obligatoria", "")),
+            _split_expressions(row.get("Senales_Positivas", "")),
+            _split_expressions(row.get("Senales_Negativas", "")),
+            row.get("Zona", "").strip(),
+            threshold,
+        ))
+    return tuple(profiles)
+
+
+def load_document_roles(configuration: ProjectConfiguration) -> dict[str, str]:
+    rows = _architecture_sheets(configuration).get("roles", [])
+    return {
+        row.get("ID_Rol", "").strip(): row.get("Rol_Documental", "").strip()
+        for row in rows
+        if row.get("ID_Rol", "").strip() and row.get("Rol_Documental", "").strip()
+    }
 
 
 def _active(row: dict[str, str]) -> bool:
@@ -263,7 +334,47 @@ def _classify_document(
     document: str,
     pages: list[dict[str, Any]],
     definitions: tuple[DocumentTypeDefinition, ...],
+    profiles: tuple[DocumentProfile, ...] = (),
+    logical: dict[str, Any] | None = None,
+    roles: dict[str, str] | None = None,
 ) -> DocumentoClasificado:
+    if profiles:
+        first_pages = sorted(pages, key=lambda item: int(item.get("pagina", 0) or 0))[:3]
+        first_text = "\n".join(str(item.get("texto", "")) for item in first_pages)
+        ranked: list[tuple[float, DocumentProfile, list[EvidenciaClasificacion]]] = []
+        for profile in profiles:
+            required = [item for item in profile.senales_obligatorias if _matches(item, first_text)]
+            if profile.senales_obligatorias and not required:
+                continue
+            positives = [item for item in profile.senales_positivas if _matches(item, first_text)]
+            negatives = [item for item in profile.senales_negativas if _matches(item, first_text)]
+            denominator = max(1, len(profile.senales_positivas))
+            score = 70.0 + (30.0 * len(positives) / denominator) - (35.0 * len(negatives))
+            if logical and logical.get("id_perfil_sugerido") == profile.id_perfil:
+                score += 5.0
+            evidence = [
+                EvidenciaClasificacion(int(first_pages[0].get("pagina", 1) or 1), item)
+                for item in dict.fromkeys([*required, *positives])
+            ] if first_pages else []
+            if score >= profile.umbral:
+                ranked.append((min(score, 100.0), profile, evidence))
+        if ranked:
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            best_score, best_profile, best_evidence = ranked[0]
+            if len(ranked) == 1 or best_score > ranked[1][0]:
+                role_id = str((logical or {}).get("rol_sugerido") or "")
+                return DocumentoClasificado(
+                    document,
+                    best_profile.tipo_documental,
+                    best_profile.codigo_tipo,
+                    "Identificado",
+                    tuple(best_evidence),
+                    "Tipo físico identificado mediante perfil y señales discriminantes de Arquitectura.xlsx.",
+                    str((logical or {}).get("documento_logico_id") or "") or None,
+                    best_profile.tipo_documental,
+                    (roles or {}).get(role_id, role_id or None),
+                    round(best_score, 2),
+                )
     scores: dict[str, int] = defaultdict(int)
     evidences: dict[str, list[EvidenciaClasificacion]] = defaultdict(list)
     by_code = {definition.codigo: definition for definition in definitions}
@@ -339,6 +450,24 @@ def _load_ocr_texts(configuration: ProjectConfiguration, expediente_id: str) -> 
     return [item for item in payload["textos"] if isinstance(item, dict)]
 
 
+def _load_segmentation(configuration: ProjectConfiguration, expediente_id: str) -> dict[str, dict[str, Any]]:
+    settings = configuration.values.get("segmentacion", {})
+    filename = str(settings.get("archivo_salida", "segmentacion_documental.json")) if isinstance(settings, dict) else "segmentacion_documental.json"
+    path = configuration.route("salida") / expediente_id / filename
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    items = payload.get("documentos_logicos", [])
+    return {
+        str(item.get("documento_original")): item
+        for item in items
+        if isinstance(item, dict) and item.get("documento_original")
+    }
+
+
 def _write_result(configuration: ProjectConfiguration, result: ResultadoClasificacion) -> Path:
     target = configuration.route("salida") / result.id_expediente / "clasificacion_documental.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -369,13 +498,23 @@ def classify_expediente_documents(
     if not documents_to_classify:
         raise ClassificationError("No hay documentos seleccionados para clasificar")
     definitions = load_document_types(configuration)
+    profiles = load_document_profiles(configuration)
+    roles = load_document_roles(configuration)
+    segmented = _load_segmentation(configuration, expediente_id)
     texts_by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for text in _load_ocr_texts(configuration, expediente_id):
         document = text.get("documento")
         if isinstance(document, str):
             texts_by_document[document].append(text)
     documents = tuple(
-        _classify_document(document.ubicacion_original, texts_by_document[document.ubicacion_original], definitions)
+        _classify_document(
+            document.ubicacion_original,
+            texts_by_document[document.ubicacion_original],
+            definitions,
+            profiles,
+            segmented.get(document.ubicacion_original),
+            roles,
+        )
         for document in documents_to_classify
     )
     provisional = ResultadoClasificacion(expediente_id, documents, "")
