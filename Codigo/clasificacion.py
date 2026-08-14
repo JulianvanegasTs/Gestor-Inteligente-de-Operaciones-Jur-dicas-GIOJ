@@ -9,6 +9,7 @@ import unicodedata
 import zipfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -98,6 +99,46 @@ def _normalizar(value: str) -> str:
 
 def _tokens(value: str) -> tuple[str, ...]:
     return tuple(_normalizar(value).split())
+
+
+def _is_discriminative_expression(value: str) -> bool:
+    """Evita que valores de catálogo genéricos decidan una clasificación.
+
+    Los catálogos también contienen valores operativos como ``Sí`` y ``No``.
+    Son válidos para sus respectivos campos, pero no identifican por sí solos el
+    tipo físico de un PDF y producen falsos positivos durante la clasificación.
+    """
+    normalized = _normalizar(value)
+    if normalized in {"", "si", "no", "true", "false", "0", "1"}:
+        return False
+    tokens = normalized.split()
+    return len(tokens) > 1 or len(normalized) >= 5
+
+
+def _profile_matches(expression: str, text: str) -> bool:
+    """Reconoce señales de perfil incluso con pequeñas deformaciones del OCR.
+
+    La señal y el umbral siguen provenientes de Arquitectura.xlsx. La
+    tolerancia se limita a expresiones suficientemente largas y se usa solo
+    para perfiles físicos, nunca para los valores jurídicos a contrastar.
+    """
+    if _matches(expression, text):
+        return True
+    target = "".join(_tokens(expression))
+    for line in text.splitlines():
+        candidate = "".join(_tokens(line))
+        if len(target) >= 8 and len(candidate) >= max(5, len(target) - 4):
+            if SequenceMatcher(None, target, candidate).ratio() >= 0.82:
+                return True
+    signal_tokens = [token for token in _tokens(expression) if len(token) >= 5]
+    text_tokens = _tokens(text)
+    if not signal_tokens or not text_tokens:
+        return False
+    matches = sum(
+        any(SequenceMatcher(None, signal, candidate).ratio() >= 0.82 for candidate in text_tokens)
+        for signal in signal_tokens
+    )
+    return matches >= max(1, (len(signal_tokens) + 1) // 2)
 
 
 def _column_index(reference: str) -> int:
@@ -292,7 +333,9 @@ def load_document_types(configuration: ProjectConfiguration) -> tuple[DocumentTy
         if source not in source_expressions:
             continue
         catalog = field_catalogs.get(field_id, "")
-        source_expressions[source].extend(catalogs.get(catalog, []))
+        source_expressions[source].extend(
+            value for value in catalogs.get(catalog, []) if _is_discriminative_expression(value)
+        )
 
     definitions: list[DocumentTypeDefinition] = []
     unmatched_sources = set(source_names)
@@ -343,13 +386,14 @@ def _classify_document(
         first_text = "\n".join(str(item.get("texto", "")) for item in first_pages)
         ranked: list[tuple[float, DocumentProfile, list[EvidenciaClasificacion]]] = []
         for profile in profiles:
-            required = [item for item in profile.senales_obligatorias if _matches(item, first_text)]
+            required = [item for item in profile.senales_obligatorias if _profile_matches(item, first_text)]
             if profile.senales_obligatorias and not required:
                 continue
-            positives = [item for item in profile.senales_positivas if _matches(item, first_text)]
-            negatives = [item for item in profile.senales_negativas if _matches(item, first_text)]
-            denominator = max(1, len(profile.senales_positivas))
-            score = 70.0 + (30.0 * len(positives) / denominator) - (35.0 * len(negatives))
+            positives = [item for item in profile.senales_positivas if _profile_matches(item, first_text)]
+            negatives = [item for item in profile.senales_negativas if _profile_matches(item, first_text)]
+            required_score = 15.0 * len(required) / max(1, len(profile.senales_obligatorias))
+            positive_score = 20.0 * len(positives) / max(1, len(profile.senales_positivas))
+            score = 70.0 + required_score + positive_score - (35.0 * len(negatives))
             if logical and logical.get("id_perfil_sugerido") == profile.id_perfil:
                 score += 5.0
             evidence = [

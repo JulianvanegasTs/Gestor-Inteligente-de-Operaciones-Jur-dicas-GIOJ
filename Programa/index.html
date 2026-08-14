@@ -742,21 +742,31 @@
             if (!fields.length) {
                 lines.push('No se registraron validaciones.');
             }
-            for (const [index, field] of fields.entries()) {
-                const page = Number(field.pagina || 0);
-                const resultText = field.estado_validacion === 'Cumple'
-                    ? 'Coincide con el dato que también se encuentra en el documento para firma_escritura.'
-                    : field.estado_validacion === 'No cumple'
-                        ? 'No coincide con el dato de la escritura para firma.'
-                        : 'No coincide: no existe evidencia suficiente para efectuar el contraste.';
-                lines.push(
-                    index ? '' : null,
-                    `${index + 1}. ${visibleText(field.datos, 'Dato no identificado')}`,
-                    `- Valor encontrado: ${visibleText(field.valor_encontrado, 'No se encontró información')}`,
-                    `- Documento validado: ${visibleText(field.documento_validado, 'No identificado')}`,
-                    `- Página: ${Number.isInteger(page) && page > 0 ? page : 0}`,
-                    `- Resultado: ${resultText}`
-                );
+            const groups = new Map();
+            for (const field of fields) {
+                const label = visibleText(field.datos, 'Dato no identificado');
+                const key = label.toLocaleLowerCase('es-CO');
+                if (!groups.has(key)) {
+                    groups.set(key, {label, fields: []});
+                }
+                groups.get(key).fields.push(field);
+            }
+            for (const [index, group] of [...groups.values()].entries()) {
+                lines.push(index ? '' : null, `${index + 1}. ${group.label}`);
+                for (const field of group.fields) {
+                    const page = Number(field.pagina || 0);
+                    const resultText = field.estado_validacion === 'Cumple'
+                        ? 'Coincide con el dato que también se encuentra en el documento para firma_escritura.'
+                        : field.estado_validacion === 'No cumple'
+                            ? 'No coincide con el dato de la escritura para firma.'
+                            : 'No coincide: no existe evidencia suficiente para efectuar el contraste.';
+                    lines.push(
+                        `- Valor encontrado: ${visibleText(field.valor_encontrado, 'No se encontró información')}`,
+                        `- Documento validado: ${visibleText(field.documento_validado, 'No identificado')}`,
+                        `- Página: ${Number.isInteger(page) && page > 0 ? page : 0}`,
+                        `- Resultado: ${resultText}`
+                    );
+                }
             }
             showMessage(outputInfo, lines.filter(line => line !== null).join('\n'));
             validationDetails.replaceChildren();

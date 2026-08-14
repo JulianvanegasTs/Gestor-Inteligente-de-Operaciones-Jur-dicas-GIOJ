@@ -66,6 +66,8 @@
     "habilitado": true,
     "idioma": "spa",
     "permitir_pdf_digital": true,
+    "verificar_calidad_pdf_digital": true,
+    "umbral_calidad_pdf_digital": 0.82,
     "permitir_pdf_escaneado": true,
     "permitir_imagenes": true,
     "registrar_confianza": true,

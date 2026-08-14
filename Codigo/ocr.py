@@ -84,6 +84,28 @@ def _ocr_setting(configuration: ProjectConfiguration, name: str, default: object
     return settings.get(name, default) if isinstance(settings, dict) else default
 
 
+def _digital_text_requires_ocr(text: str, configuration: ProjectConfiguration) -> bool:
+    """Decide si el texto incrustado de un PDF es demasiado degradado.
+
+    Algunos PDF contienen una capa de texto, pero sus glifos se recuperan con
+    sustituciones que impiden identificar etiquetas y valores. La verificación
+    visual se limita a esos casos y conserva el OCR como evidencia de página.
+    """
+    if not bool(_ocr_setting(configuration, "verificar_calidad_pdf_digital", True)):
+        return False
+    visible = [character for character in text if not character.isspace()]
+    if not visible:
+        return True
+    allowed_punctuation = set(".,;:-()/º°%$#")
+    irregular = sum(
+        not (character.isalnum() or character in allowed_punctuation)
+        for character in visible
+    )
+    quality = max(0.0, 1.0 - (5.0 * irregular / len(visible)))
+    threshold = float(_ocr_setting(configuration, "umbral_calidad_pdf_digital", 0.82))
+    return quality < threshold
+
+
 def _source_path(configuration: ProjectConfiguration, document: DocumentoExpediente) -> Path:
     source = (configuration.project_root / document.ubicacion_original).resolve()
     try:
@@ -370,7 +392,20 @@ def _extract_pdf(
                 raise OCRExtractionError("La extracción de PDF digitales está deshabilitada en la configuración")
             if progress:
                 progress(document.ubicacion_original, number, "Extrayendo texto del PDF digital")
-            results.append(TextoExtraido(document.ubicacion_original, number, text, "PDF digital"))
+            if not _digital_text_requires_ocr(text, configuration):
+                results.append(TextoExtraido(document.ubicacion_original, number, text, "PDF digital"))
+                continue
+            if progress:
+                progress(document.ubicacion_original, number, "Verificando texto digital mediante OCR")
+            rendered_page = _render_pdf_page(path, number, renderer, resolution)
+            try:
+                verified = _verified_ocr_file(rendered_page, configuration)
+            finally:
+                shutil.rmtree(rendered_page.parent, ignore_errors=True)
+            results.append(TextoExtraido(
+                document.ubicacion_original, number, verified[0], "OCR de verificación de PDF digital",
+                verified[1], text, None, verified[4], verified[5],
+            ))
             continue
         if not bool(_ocr_setting(configuration, "permitir_pdf_escaneado", True)):
             raise OCRExtractionError("El OCR de PDF escaneados está deshabilitado en la configuración")
@@ -457,7 +492,22 @@ def _extract_memory_document(
                     raise OCRExtractionError("La extracción de PDF digitales está deshabilitada en la configuración")
                 if progress:
                     progress(document.ubicacion_original, number, "Extrayendo texto del PDF digital")
-                results.append(TextoExtraido(document.ubicacion_original, number, text, "PDF digital"))
+                if not _digital_text_requires_ocr(text, configuration):
+                    results.append(TextoExtraido(document.ubicacion_original, number, text, "PDF digital"))
+                    continue
+                if progress:
+                    progress(document.ubicacion_original, number, "Verificando texto digital mediante OCR")
+                image_content = _render_pdf_page_bytes(
+                    content,
+                    number,
+                    int(_ocr_setting(configuration, "resolucion_pdf", 300)),
+                    renderer,
+                )
+                verified = _verified_ocr_bytes(image_content, configuration)
+                results.append(TextoExtraido(
+                    document.ubicacion_original, number, verified[0], "OCR de verificación de PDF digital",
+                    verified[1], text, None, verified[4], verified[5],
+                ))
                 continue
             if progress:
                 progress(document.ubicacion_original, number, "Aplicando OCR al PDF escaneado")

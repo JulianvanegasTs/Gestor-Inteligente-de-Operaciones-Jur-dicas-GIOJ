@@ -753,6 +753,18 @@ def _fuzzy_label_candidates(
     return tuple(candidates)
 
 
+def _matches_preceding_label(label: str, phrases: tuple[str, ...]) -> bool:
+    """Reconoce una etiqueta aislada, aun cuando el OCR altere pocos caracteres."""
+    if any(re.fullmatch(_phrase_pattern(phrase), label) for phrase in phrases):
+        return True
+    return any(
+        " " not in phrase
+        and len(phrase) >= 5
+        and _edit_distance(label, phrase) <= 2
+        for phrase in phrases
+    )
+
+
 def _preceding_label_candidates(
     text: str,
     phrases: tuple[str, ...],
@@ -764,9 +776,18 @@ def _preceding_label_candidates(
     complete_value = "completo" in _normalizar(field.descripcion or "")
     for index, label in enumerate(lines):
         normalized_label = _normalizar(label)
-        if not any(re.fullmatch(_phrase_pattern(phrase), normalized_label) for phrase in phrases):
+        if not _matches_preceding_label(normalized_label, phrases):
             continue
         preceding = lines[max(0, index - 3):index]
+        if "numero" in _content_tokens(field.campo):
+            numeric = [
+                value for value in preceding
+                if re.fullmatch(r"[\d?.,\s-]{5,}", value)
+            ]
+            for value in numeric[-1:]:
+                cleaned = re.sub(r"\D", "", value)
+                if _valid_candidate(cleaned, field):
+                    candidates.append(_Candidate(cleaned, "\n".join([value, label]), 140))
         textual = [
             value
             for value in preceding

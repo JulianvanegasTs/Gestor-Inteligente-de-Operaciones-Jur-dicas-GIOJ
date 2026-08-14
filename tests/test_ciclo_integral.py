@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from lxml import etree
 
-from Codigo.clasificacion import DocumentProfile, _classify_document
+from Codigo.clasificacion import DocumentProfile, _classify_document, _profile_matches, load_document_types
 from Codigo.config import ProjectConfiguration, load_configuration
 from Codigo.extraccion import (
     CriterioExtraccion,
@@ -128,6 +128,31 @@ class IntegralCycleTests(unittest.TestCase):
             values[field_id] = accepted
         self.assertIn("CÉDULA DE CIUDADANÍA", values["PER-003"])
         self.assertIn("91292114", values["PER-004"])
+
+    def test_noisy_identity_profile_is_identified_without_generic_catalog_evidence(self) -> None:
+        configuration = load_configuration(PROJECT_ROOT)
+        text = (
+            "IDENTIF!CACION PERSONAL\nCCÚUIJ\\ t]E CIUDADANIA\n"
+            "APEI I IDOS\nFECi-lA y LUGAR DE EXpEDtctoN"
+        )
+        self.assertTrue(_profile_matches("IDENTIFICACION PERSONAL", text))
+        self.assertTrue(_profile_matches("CEDULA DE CIUDADANIA", text))
+        classified = _classify_document(
+            "Cedula Cristian Rivera.pdf",
+            [{"pagina": 1, "texto": text}],
+            load_document_types(configuration),
+            (
+                DocumentProfile(
+                    "PER-DOC_ID", "DOC_ID", "Documento de identidad",
+                    ("IDENTIFICACION PERSONAL", "CEDULA DE CIUDADANIA"),
+                    ("APELLIDOS", "FECHA Y LUGAR DE EXPEDICION"), (), "Primera página", 90,
+                ),
+            ),
+        )
+        self.assertEqual(classified.estado, "Identificado")
+        self.assertEqual(classified.codigo_tipo_documental, "DOC_ID")
+        certificate = next(item for item in load_document_types(configuration) if item.codigo == "DOC_CTL")
+        self.assertNotIn("Sí", certificate.expresiones)
 
     def test_missing_signature_writing_never_compares_against_an_old_deed(self) -> None:
         configuration = load_configuration(PROJECT_ROOT)

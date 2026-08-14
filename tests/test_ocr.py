@@ -29,6 +29,7 @@ from Codigo.ocr import (
     OCRExtractionError,
     ResultadoOCR,
     TextoExtraido,
+    _digital_text_requires_ocr,
     _extract_pdf,
     _render_pdf_page_bytes,
     _run_tesseract,
@@ -51,6 +52,15 @@ def create_project() -> Path:
 
 
 class OCRTests(unittest.TestCase):
+    def test_degraded_digital_text_requires_visual_ocr_verification(self) -> None:
+        configuration = load_configuration(Path(__file__).parent.parent)
+        degraded = "IDENTIF!CACION PERSONAL\nCCÚUIJ\\ t]E CIUDADANIA\nNUMÉN(,"
+        self.assertTrue(_digital_text_requires_ocr(degraded, configuration))
+        self.assertFalse(_digital_text_requires_ocr(
+            "REPÚBLICA DE COLOMBIA\nIDENTIFICACIÓN PERSONAL\nCÉDULA DE CIUDADANÍA",
+            configuration,
+        ))
+
     def test_memory_pdf_uses_configured_renderer_when_pdfium_is_unavailable(self) -> None:
         rendered = b"\x89PNG\r\n\x1a\nrendered"
         completed = subprocess.CompletedProcess([], 0, stdout=rendered, stderr=b"")
