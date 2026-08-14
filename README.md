@@ -147,7 +147,9 @@ El encabezado HTML declara los iconos públicos `/favicon.ico`,
 navegadores y accesos directos. Estas referencias son únicamente de
 presentación: no intervienen en la selección, el análisis ni el tratamiento de
 documentos jurídicos. Los archivos se conservan en `Programa/` y el servidor
-local los publica en esas rutas de raíz.
+local los publica en esas rutas de raíz. `site.webmanifest` registra los
+iconos para navegadores basados en Chromium, incluido Brave; las URL llevan una
+versión para que una actualización del icono no reutilice una caché anterior.
 
 El servidor debe permanecer ejecutándose mientras se usa la interfaz. Si se
 cierra la terminal o el proceso local, la página puede continuar visible en el

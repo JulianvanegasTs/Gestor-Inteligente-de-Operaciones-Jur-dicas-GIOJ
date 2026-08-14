@@ -1,0 +1,19 @@
+{
+  "name": "Gestor Inteligente de Operaciones Jurídicas",
+  "short_name": "GIOJ",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png?v=20260814",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png?v=20260814",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#1c335a",
+  "background_color": "#e9ecef",
+  "display": "standalone"
+}

@@ -188,6 +188,7 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
         "/favicon-32x32.png": (project_root / "Programa" / "favicon-32x32.png", "image/png"),
         "/favicon-16x16.png": (project_root / "Programa" / "favicon-16x16.png", "image/png"),
         "/apple-touch-icon.png": (project_root / "Programa" / "apple-touch-icon.png", "image/png"),
+        "/site.webmanifest": (project_root / "Programa" / "site.webmanifest", "application/manifest+json"),
     }
     analysis_states: dict[str, dict[str, Any]] = {}
     analysis_states_lock = threading.Lock()

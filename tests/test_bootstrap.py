@@ -121,6 +121,7 @@ class BootstrapTests(unittest.TestCase):
         source = root / "Programa"
         source.mkdir()
         (source / "favicon.ico").write_bytes(b"favicon-de-prueba")
+        (source / "site.webmanifest").write_text('{"name": "GIOJ"}', encoding="utf-8")
         server = create_server(root)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -129,6 +130,9 @@ class BootstrapTests(unittest.TestCase):
             with urlopen(f"http://{address}:{port}/favicon.ico") as response:
                 self.assertEqual(response.headers.get_content_type(), "image/x-icon")
                 self.assertEqual(response.read(), b"favicon-de-prueba")
+            with urlopen(f"http://{address}:{port}/site.webmanifest") as response:
+                self.assertEqual(response.headers.get_content_type(), "application/manifest+json")
+                self.assertEqual(response.read(), b'{"name": "GIOJ"}')
         finally:
             server.shutdown()
             server.server_close()
