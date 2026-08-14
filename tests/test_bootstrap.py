@@ -116,6 +116,23 @@ class BootstrapTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_favicon_is_served_from_the_official_interface_directory(self) -> None:
+        root = self.create_project()
+        source = root / "Programa"
+        source.mkdir()
+        (source / "favicon.ico").write_bytes(b"favicon-de-prueba")
+        server = create_server(root)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address, port = server.server_address[:2]
+            with urlopen(f"http://{address}:{port}/favicon.ico") as response:
+                self.assertEqual(response.headers.get_content_type(), "image/x-icon")
+                self.assertEqual(response.read(), b"favicon-de-prueba")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_new_project_endpoint_returns_readiness(self) -> None:
         root = self.create_project()
         server = create_server(root)

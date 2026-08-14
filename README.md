@@ -146,8 +146,8 @@ El encabezado HTML declara los iconos públicos `/favicon.ico`,
 `/favicon-32x32.png`, `/favicon-16x16.png` y `/apple-touch-icon.png` para
 navegadores y accesos directos. Estas referencias son únicamente de
 presentación: no intervienen en la selección, el análisis ni el tratamiento de
-documentos jurídicos. Al desplegar la interfaz, publique esos recursos en la
-raíz estática del servidor si se dispone de los archivos de imagen.
+documentos jurídicos. Los archivos se conservan en `Programa/` y el servidor
+local los publica en esas rutas de raíz.
 
 El servidor debe permanecer ejecutándose mientras se usa la interfaz. Si se
 cierra la terminal o el proceso local, la página puede continuar visible en el

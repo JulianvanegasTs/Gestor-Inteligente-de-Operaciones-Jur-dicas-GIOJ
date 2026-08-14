@@ -183,6 +183,12 @@ def _visible_analysis_error(stage: str, detail: str) -> str:
 def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
     """Crea un servidor solo local para la interfaz oficial del proyecto."""
     interface_path = project_root / "Programa" / "index.html"
+    static_assets = {
+        "/favicon.ico": (project_root / "Programa" / "favicon.ico", "image/x-icon"),
+        "/favicon-32x32.png": (project_root / "Programa" / "favicon-32x32.png", "image/png"),
+        "/favicon-16x16.png": (project_root / "Programa" / "favicon-16x16.png", "image/png"),
+        "/apple-touch-icon.png": (project_root / "Programa" / "apple-touch-icon.png", "image/png"),
+    }
     analysis_states: dict[str, dict[str, Any]] = {}
     analysis_states_lock = threading.Lock()
     selected_files: dict[str, tuple[ArchivoSeleccionado, ...]] = {}
@@ -274,6 +280,19 @@ def create_server(project_root: Path, port: int = 0) -> ThreadingHTTPServer:
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            asset = static_assets.get(parsed.path)
+            if asset is not None:
+                asset_path, content_type = asset
+                if not asset_path.is_file():
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": "Recurso estático no encontrado"})
+                    return
+                body = asset_path.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if parsed.path == "/":
                 if not interface_path.is_file():
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "Interfaz no encontrada"})
