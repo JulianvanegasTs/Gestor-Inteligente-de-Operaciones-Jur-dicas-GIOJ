@@ -138,10 +138,16 @@ python -m Codigo interfaz --puerto 8000
 ```
 
 Abra `http://127.0.0.1:8000/` en el navegador. La interfaz se sirve desde
-`Programa/index.html` sin modificar ese archivo. Los botones se conectan con
-el backend: **Seleccionar archivos** recibe temporalmente los documentos en
+`Programa/index.html`. Los botones se conectan con el backend: **Seleccionar archivos** recibe temporalmente los documentos en
 memoria y **Iniciar análisis** ejecuta clasificación, OCR, extracción,
 normalización, validación y concepto jurídico.
+
+El encabezado HTML declara los iconos públicos `/favicon.ico`,
+`/favicon-32x32.png`, `/favicon-16x16.png` y `/apple-touch-icon.png` para
+navegadores y accesos directos. Estas referencias son únicamente de
+presentación: no intervienen en la selección, el análisis ni el tratamiento de
+documentos jurídicos. Al desplegar la interfaz, publique esos recursos en la
+raíz estática del servidor si se dispone de los archivos de imagen.
 
 El servidor debe permanecer ejecutándose mientras se usa la interfaz. Si se
 cierra la terminal o el proceso local, la página puede continuar visible en el
